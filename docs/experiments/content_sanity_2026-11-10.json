@@ -1,0 +1,45 @@
+{
+  "k": 10,
+  "items": 8000,
+  "methods": {
+    "tfidf[tfidf_text_v1|sklearn-1.9.1|p-3b78591d]": {
+      "collection_recall@10": 0.9698,
+      "collection_recall_ci95": [
+        0.9627,
+        0.9767
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.8059,
+      "title_token_overlap@10": 0.1102,
+      "same_type@10": 0.8044,
+      "catalog_coverage@10": 0.9986,
+      "items": 8000
+    },
+    "embedding[sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@e8f8c211226b|emb_text_v1]": {
+      "collection_recall@10": 0.8823,
+      "collection_recall_ci95": [
+        0.8677,
+        0.8971
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.8458,
+      "title_token_overlap@10": 0.1638,
+      "same_type@10": 0.7596,
+      "catalog_coverage@10": 0.9453,
+      "items": 8000
+    },
+    "embedding[sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@e8f8c211226b|emb_text_v2]": {
+      "collection_recall@10": 0.6051,
+      "collection_recall_ci95": [
+        0.5823,
+        0.6291
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9394,
+      "title_token_overlap@10": 0.0503,
+      "same_type@10": 0.8175,
+      "catalog_coverage@10": 0.8985,
+      "items": 8000
+    }
+  }
+}

@@ -1,0 +1,39 @@
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Dados locais (Bronze/Silver/Gold, checkpoints) — nunca versionar
+data/
+*.jsonl.gz
+*.parquet
+
+# Artefatos de ML
+mlruns/
+mlartifacts/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+
+# Frontend (Node/Vite)
+node_modules/
+frontend/**/dist/
+*.tsbuildinfo
+
+# Pacotes baixados (ex.: export do gerador de frontend)
+*.zip

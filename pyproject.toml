@@ -1,0 +1,85 @@
+[project]
+name = "cinematch"
+version = "0.1.0"
+description = "CineMatch: plataforma de recomendação de filmes e séries com pipeline de MLOps."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0.30",
+    "psycopg[binary]>=3.2",
+    "httpx>=0.27",
+    "alembic>=1.13",
+    "pgvector>=0.3",
+]
+
+[project.optional-dependencies]
+# Features/treino. Fora da imagem da API (que só consulta vetores já gravados no pgvector).
+ml = [
+    "pyarrow>=16",
+    "scikit-learn>=1.5",
+    "sentence-transformers>=3.0",
+    "torch>=2.3",
+    "lightgbm>=4.5",
+    # Cliente de tracking (mesma minor do servidor no Compose).
+    "mlflow-skinny>=3.17.2,<3.18",
+]
+
+[project.scripts]
+cinematch = "cinematch.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "respx>=0.21",
+]
+# Notebooks de experimentos (models/). `uv sync --extra ml --group notebook`.
+notebook = [
+    "jupyterlab>=4.2",
+    "ipykernel>=6.29",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+# PyTorch só CPU (~200 MB) em vez do build CUDA (~2-3 GB).
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cinematch"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "SIM", "RUF"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S107"]
+# SQL montado só com fragmentos constantes do módulo; valores sempre por bind (revisado).
+"src/cinematch/serving/catalog.py" = ["S608"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requer serviços externos (ex.: PostgreSQL)",
+]

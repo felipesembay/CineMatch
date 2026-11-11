@@ -1,0 +1,304 @@
+{
+  "k": 10,
+  "items": 8000,
+  "fingerprint": "338b482788c7906e",
+  "versions": {
+    "tfidf": "tfidf_text_v1|sklearn-1.9.1|p-3b78591d",
+    "emb_v1": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@e8f8c211226b|emb_text_v1",
+    "emb_v2": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2@e8f8c211226b|emb_text_v2"
+  },
+  "item_to_item": {
+    "tfidf:cosine": {
+      "collection_recall@10": 0.9698,
+      "collection_recall_ci95": [
+        0.9627,
+        0.9767
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.8059,
+      "title_token_overlap@10": 0.1102,
+      "same_type@10": 0.8044,
+      "catalog_coverage@10": 0.9986,
+      "items": 8000,
+      "collection_ndcg@10": 0.9265,
+      "hub_top1pct_share@10": 0.067,
+      "seconds": 3.05
+    },
+    "emb_v1:cosine": {
+      "collection_recall@10": 0.8823,
+      "collection_recall_ci95": [
+        0.8677,
+        0.8971
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.8458,
+      "title_token_overlap@10": 0.1638,
+      "same_type@10": 0.7596,
+      "catalog_coverage@10": 0.9453,
+      "items": 8000,
+      "collection_ndcg@10": 0.8142,
+      "hub_top1pct_share@10": 0.0874,
+      "seconds": 3.84
+    },
+    "emb_v2:cosine": {
+      "collection_recall@10": 0.6051,
+      "collection_recall_ci95": [
+        0.5823,
+        0.6291
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9394,
+      "title_token_overlap@10": 0.0503,
+      "same_type@10": 0.8175,
+      "catalog_coverage@10": 0.8985,
+      "items": 8000,
+      "collection_ndcg@10": 0.5265,
+      "hub_top1pct_share@10": 0.0931,
+      "seconds": 3.86
+    },
+    "rrf(tfidf+emb_v2)": {
+      "collection_recall@10": 0.8455,
+      "collection_recall_ci95": [
+        0.8287,
+        0.8628
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9321,
+      "title_token_overlap@10": 0.0825,
+      "same_type@10": 0.8544,
+      "catalog_coverage@10": 0.9635,
+      "items": 8000,
+      "collection_ndcg@10": 0.7547,
+      "hub_top1pct_share@10": 0.0631,
+      "seconds": 7.4
+    },
+    "tfidf:rocchio_prf": {
+      "collection_recall@10": 0.9729,
+      "collection_recall_ci95": [
+        0.9657,
+        0.9791
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.8315,
+      "title_token_overlap@10": 0.1103,
+      "same_type@10": 0.8105,
+      "catalog_coverage@10": 0.9925,
+      "items": 8000,
+      "collection_ndcg@10": 0.923,
+      "hub_top1pct_share@10": 0.1043,
+      "seconds": 7.5
+    },
+    "emb_v2:rocchio_prf": {
+      "collection_recall@10": 0.5768,
+      "collection_recall_ci95": [
+        0.5534,
+        0.6004
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9423,
+      "title_token_overlap@10": 0.0488,
+      "same_type@10": 0.8174,
+      "catalog_coverage@10": 0.8246,
+      "items": 8000,
+      "collection_ndcg@10": 0.4848,
+      "hub_top1pct_share@10": 0.1406,
+      "seconds": 7.58
+    },
+    "rerank:logreg": {
+      "collection_recall@10": 0.9853,
+      "collection_recall_ci95": [
+        0.9809,
+        0.9895
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9673,
+      "title_token_overlap@10": 0.0985,
+      "same_type@10": 0.9992,
+      "catalog_coverage@10": 0.9815,
+      "items": 8000,
+      "collection_ndcg@10": 0.9613,
+      "hub_top1pct_share@10": 0.0507,
+      "seconds": 3.7
+    },
+    "rerank:sgd": {
+      "collection_recall@10": 0.9847,
+      "collection_recall_ci95": [
+        0.9805,
+        0.989
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9683,
+      "title_token_overlap@10": 0.0994,
+      "same_type@10": 0.9984,
+      "catalog_coverage@10": 0.9819,
+      "items": 8000,
+      "collection_ndcg@10": 0.9602,
+      "hub_top1pct_share@10": 0.0485,
+      "seconds": 2.47
+    },
+    "rerank:lightgbm": {
+      "collection_recall@10": 0.9863,
+      "collection_recall_ci95": [
+        0.9823,
+        0.9905
+      ],
+      "collection_queries": 1238,
+      "genre_overlap@10": 0.9636,
+      "title_token_overlap@10": 0.1123,
+      "same_type@10": 0.9201,
+      "catalog_coverage@10": 0.984,
+      "items": 8000,
+      "collection_ndcg@10": 0.9701,
+      "hub_top1pct_share@10": 0.0549,
+      "seconds": 10.35
+    }
+  },
+  "multiseed": {
+    "tfidf:single_seed": {
+      "profile_recall@10": 0.9565,
+      "profile_recall_ci95": [
+        0.9305,
+        0.9794
+      ],
+      "tasks": 168
+    },
+    "tfidf:maxsim": {
+      "profile_recall@10": 0.9779,
+      "profile_recall_ci95": [
+        0.9583,
+        0.9923
+      ],
+      "tasks": 168
+    },
+    "tfidf:rocchio": {
+      "profile_recall@10": 0.9851,
+      "profile_recall_ci95": [
+        0.9694,
+        0.9963
+      ],
+      "tasks": 168
+    },
+    "emb_v2:single_seed": {
+      "profile_recall@10": 0.5294,
+      "profile_recall_ci95": [
+        0.4609,
+        0.5993
+      ],
+      "tasks": 168
+    },
+    "emb_v2:maxsim": {
+      "profile_recall@10": 0.6195,
+      "profile_recall_ci95": [
+        0.5553,
+        0.6883
+      ],
+      "tasks": 168
+    },
+    "emb_v2:rocchio": {
+      "profile_recall@10": 0.6371,
+      "profile_recall_ci95": [
+        0.5751,
+        0.7058
+      ],
+      "tasks": 168
+    }
+  },
+  "rerank_details": {
+    "rerank:logreg": {
+      "importance": {
+        "same_type": 4.9779,
+        "same_language": 1.7785,
+        "cos_emb_v1": 1.2024,
+        "genre_jaccard": 1.2014,
+        "cos_tfidf": 1.1499,
+        "rank_tfidf": -0.8726,
+        "year_diff": 0.4749,
+        "cos_emb_v2": -0.4361,
+        "shared_cast": 0.3995,
+        "cand_log_votes": 0.382,
+        "rank_emb_v2": -0.3631,
+        "shared_directors": 0.2051,
+        "cand_log_popularity": -0.1036,
+        "keyword_jaccard": -0.0572
+      },
+      "fold_recall": [
+        0.9928,
+        0.9777,
+        0.9941,
+        0.9837,
+        0.9782
+      ],
+      "candidates": {
+        "depth": 50,
+        "dense_rep": "emb_v2",
+        "pairs": 735007,
+        "positives": 3435,
+        "candidate_recall_ceiling": 0.9944
+      }
+    },
+    "rerank:sgd": {
+      "importance": {
+        "same_type": 3.8901,
+        "same_language": 1.73,
+        "genre_jaccard": 1.2285,
+        "cos_emb_v1": 1.1711,
+        "cos_tfidf": 1.0997,
+        "rank_tfidf": -0.9175,
+        "cand_log_votes": 0.3753,
+        "cos_emb_v2": -0.3679,
+        "year_diff": 0.3299,
+        "shared_cast": 0.2888,
+        "rank_emb_v2": -0.2821,
+        "keyword_jaccard": -0.0999,
+        "cand_log_popularity": -0.0969,
+        "shared_directors": 0.0832
+      },
+      "fold_recall": [
+        0.9912,
+        0.9777,
+        0.9937,
+        0.9837,
+        0.9774
+      ],
+      "candidates": {
+        "depth": 50,
+        "dense_rep": "emb_v2",
+        "pairs": 735007,
+        "positives": 3435,
+        "candidate_recall_ceiling": 0.9944
+      }
+    },
+    "rerank:lightgbm": {
+      "importance": {
+        "cos_tfidf": 0.7321,
+        "rank_tfidf": 0.0975,
+        "cos_emb_v1": 0.074,
+        "shared_cast": 0.0205,
+        "genre_jaccard": 0.0137,
+        "cand_log_votes": 0.0104,
+        "year_diff": 0.0088,
+        "keyword_jaccard": 0.0086,
+        "cand_log_popularity": 0.0071,
+        "cos_emb_v2": 0.0069,
+        "shared_directors": 0.0063,
+        "same_type": 0.0062,
+        "same_language": 0.0055,
+        "rank_emb_v2": 0.0024
+      },
+      "fold_recall": [
+        0.9901,
+        0.9789,
+        0.9941,
+        0.9858,
+        0.9825
+      ],
+      "candidates": {
+        "depth": 50,
+        "dense_rep": "emb_v2",
+        "pairs": 735007,
+        "positives": 3435,
+        "candidate_recall_ceiling": 0.9944
+      }
+    }
+  }
+}
