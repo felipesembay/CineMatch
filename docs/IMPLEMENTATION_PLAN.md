@@ -219,3 +219,28 @@ Fases 2–6 serão detalhadas apenas quando a fase anterior for aceita.
 - [x] Avaliação técnica e qualitativa registrada no MLflow.
 - [x] `/movies/{id}/similar` com testes de contrato e latência medida (p95 12,5 ms < 200 ms, condições acima).
 - [x] Recomendações determinísticas para versão fixa (`test_similar_diversity_reasons_and_determinism`) e fallback funcional (`test_similar_fallback_when_no_neighbors`).
+
+## Fase 4 — Aplicação e coleta de interações (concluída no escopo local)
+
+| # | Subtarefa | Status | Verificação |
+|---|---|---|---|
+| 4.1 | Contas (Argon2id), sessão em cookie `httpOnly`, logout, exclusão de conta (LGPD), limite de tentativas, checagem de `Origin` | ✅ | `tests/integration/test_api_users.py` |
+| 4.2 | Preferências (onboarding), favoritos, avaliações 1-5 com comentário | ✅ | `test_preferences_favorites_ratings` |
+| 4.3 | `POST /events` validado e idempotente; impressões com `request_id`, posição e `model_version` | ✅ | `test_events_idempotent_and_validated` |
+| 4.4 | `/recommendations/me` (Rocchio sobre vizinhos ativos, diversidade, motivo, fallback) | ✅ | `test_recommendations_profile_and_fallback` |
+| 4.5 | Frontend integrado: login real, onboarding, "Minha lista" (recomendações, favoritos, avaliados e comentados, curtidos), avaliação com comentário | ✅ | `tsc` + build; fluxo ponta a ponta pelo proxy |
+| 4.6 | Imagem do frontend (nginx + proxy `/api`) no Compose; job de frontend no CI | ✅ | `docker compose up` → `http://127.0.0.1:8088` |
+| 4.7 | Tombstone na expiração de itens com dados de usuário | ✅ | `test_expire_tombstones_items_with_user_data` |
+| 4.8 | Teste A/B TF-IDF × reranker (atribuição por `model_version`) | pendente | requer tráfego real |
+
+**Aceite da Fase 4**
+- [x] Eventos rastreáveis (`request_id`, `model_version`, posição), idempotentes e validados.
+- [x] Fluxo de usuário ponta a ponta: cadastro → onboarding → recomendações → favoritos/avaliações → Minha lista → exclusão de conta.
+- [ ] Volume de interações reais para avaliação online (depende de usuários).
+
+**Atualização do catálogo (2026-11-11)**
+- Coleta do responsável: catálogo com 12.497 itens (9.997 filmes, 2.500 séries).
+- Recalculados: TF-IDF (12.497 itens), embeddings `emb_text_v1` e `emb_text_v2` (incrementais), vizinhos TF-IDF (ativo) e reranker LogisticRegression (challenger, `data-4722a590dc23ada1`), snapshot Gold `catalog_items_20261111T024445Z_07011e47`.
+- Benchmark em [similarity_models_2026-11-11.json](experiments/similarity_models_2026-11-11.json), com 2.216 consultas de coleção. Mesma ordem relativa de 2026-11-10: rerankers 0,967–0,971 de recall de coleção e 0,966–0,974 de gênero; TF-IDF 0,942 e 0,810.
+- Latência ([api_latency_2026-11-11.json](experiments/api_latency_2026-11-11.json)): `/similar` p95 18,8 ms; listagem popular p95 23,9 ms.
+- Operação movida para [OPERATIONS.md](OPERATIONS.md); README reescrito como visão geral do projeto.

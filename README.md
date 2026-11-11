@@ -1,197 +1,255 @@
 # CineMatch
 
-Plataforma de recomendação de filmes e séries com catálogo de fontes externas autorizadas (TMDB, TVmaze), interações first-party e pipeline de MLOps.
+**Recomendador de filmes e séries de ponta a ponta:** coleta de dados públicos, qualidade e versionamento, comparação de modelos com MLflow, serving com FastAPI e um app web em React.
 
-> **Estado atual:** Fase 1 concluída; Fase 2 em andamento (TVmaze implementado). Já existem: API FastAPI com `/health` e `/health/ready`; schema do catálogo com migrações Alembic; ingestão TMDB incremental e idempotente, com checkpoint/resume, Bronze JSONL.gz e proveniência. Ainda **não** há modelos nem recomendações. Catálogo real: 5.000 títulos TMDB; TVmaze parcial.
+[![CI](https://github.com/felipesembay/CineMatch/actions/workflows/ci.yml/badge.svg)](https://github.com/felipesembay/CineMatch/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- Especificação: [CINEMATCH_PROJECT_SPEC.md](CINEMATCH_PROJECT_SPEC.md)
-- Plano: [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)
-- Decisões (ADRs): [docs/DECISIONS.md](docs/DECISIONS.md)
-- Fontes, termos e atribuição: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)
-
-## Requisitos
-
-- [uv](https://docs.astral.sh/uv/) ≥ 0.4 (instala Python 3.12 se necessário)
-- Docker + Docker Compose v2 (`docker compose` ou `docker-compose`)
-
-## Setup local
-
-```bash
-cp .env.example .env          # ajuste POSTGRES_PASSWORD e CINEMATCH_DATABASE_URL
-uv sync                       # cria .venv com Python 3.12 e dependências (incl. dev)
-```
-
-## Comandos
-
-| Ação | Comando |
+| | |
 |---|---|
-| Lint | `uv run ruff check . && uv run ruff format --check .` |
-| Formatar | `uv run ruff format .` |
-| Testes unitários | `uv run pytest` |
-| Testes de integração (Postgres) | ver "Testes de integração" abaixo |
-| Subir stack | `docker compose up -d --build` |
-| Ver logs | `docker compose logs -f api` |
-| Derrubar stack | `docker compose down` (adicione `-v` para apagar o volume do banco) |
-| API local sem Docker | `uv run uvicorn cinematch.api.main:app --reload --port 8010` (requer Postgres acessível para `/health/ready`) |
+| **Catálogo** | 12.497 títulos (9.997 filmes, 2.500 séries), 94 mil pessoas, 19,5 mil keywords |
+| **Modelos comparados** | TF-IDF, Sentence Transformers, RRF, Rocchio, LogisticRegression, SGD, LightGBM (LambdaRank) |
+| **Em produção** | similares por TF-IDF (vizinhos pré-computados) + recomendação personalizada por Rocchio |
+| **Latência** | `/movies/{id}/similar`: p95 18,8 ms (local, 1 cliente) |
+| **Qualidade** | 148 testes (unitários + integração com Postgres), lint e build no CI |
 
-Verificação após subir:
+---
 
-```bash
-curl -s localhost:8010/health        # {"status":"ok","version":"0.1.0"}
-curl -s localhost:8010/health/ready  # {"status":"ok","checks":{"database":"ok"}}
+## Sumário
+
+- [O que o app faz](#o-que-o-app-faz)
+- [Arquitetura](#arquitetura)
+- [Dados](#dados)
+- [Modelos](#modelos)
+- [Resultados](#resultados)
+- [Serving e personalização](#serving-e-personalização)
+- [MLOps](#mlops)
+- [Como rodar](#como-rodar)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Limitações e próximos passos](#limitações-e-próximos-passos)
+- [Fontes de dados, atribuição e licença](#fontes-de-dados-atribuição-e-licença)
+
+## O que o app faz
+
+- **Home:** destaque, "Em alta", "Mais bem avaliados" (média bayesiana) e fileiras por gênero.
+- **Detalhe:** sinopse, elenco, direção e "Mais títulos como este", com o motivo de cada recomendação ("Da coleção…", "Direção de…", "Com…").
+- **Busca:** por título, com filtros de tipo, gênero, ano e ordenação.
+- **Onboarding:** gêneros favoritos e 👍 / 👎 em títulos conhecidos, sem exigir um número mínimo.
+- **Minha lista:**
+  - "Achamos que você vai gostar", gerado a partir do que você curtiu, favoritou e avaliou.
+  - Abas de favoritos, avaliados e comentados, e curtidos.
+- **Conta:** cadastro, login, avaliação de 1 a 5 com comentário e exclusão da conta com todos os dados (LGPD).
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+  subgraph Fontes
+    TMDB[(TMDB API)]
+    TVM[(TVmaze API)]
+  end
+  subgraph Pipeline["Pipeline batch (CLI cinematch)"]
+    ING[Ingestão<br/>retry, rate limit,<br/>checkpoint/resume]
+    BR[(Bronze<br/>JSONL.gz)]
+    NORM[Normalização<br/>+ resolução de entidades]
+    QC{Quality<br/>checks}
+    FEAT[Features<br/>TF-IDF + embeddings]
+    TRAIN[Modelos e benchmark]
+    NB[Vizinhos top-50<br/>versionados]
+    GOLD[(Gold<br/>Parquet)]
+  end
+  subgraph Serving
+    PG[(PostgreSQL<br/>+ pgvector)]
+    API[FastAPI]
+    WEB[React + Vite<br/>nginx]
+  end
+  ML[(MLflow)]
+
+  TMDB --> ING
+  TVM --> ING
+  ING --> BR --> NORM --> PG
+  PG --> QC --> GOLD
+  PG --> FEAT --> TRAIN --> NB --> PG
+  TRAIN -.métricas e modelos.-> ML
+  NB -.build.-> ML
+  PG --> API --> WEB
+  WEB -.eventos.-> API
 ```
 
-Documentação interativa: http://localhost:8010/docs
+- **Monólito modular em Python**, sem microsserviços. Tudo roda com `docker compose up`: Postgres com pgvector, API, frontend e MLflow.
+- **O modelo não roda na requisição.** Jobs batch gravam as listas de vizinhos no Postgres com uma `model_version`. A API só lê essas listas, então a imagem não carrega scikit-learn/torch, a resposta é determinística e o rollback é um comando (`recs activate`).
+- **Frontend e API na mesma origem:** o proxy `/api` fica no Vite em dev e no nginx em produção. Assim o cookie de sessão é first-party e não há CORS.
 
-## Migrações
+## Dados
 
-```bash
-docker compose run --rm api cinematch db upgrade      # no container
-uv run cinematch db upgrade                           # no host (usa CINEMATCH_DATABASE_URL)
-```
-
-## Ingestão TMDB
-
-1. Gere um **API Read Access Token** em https://www.themoviedb.org/settings/api e coloque-o em `TMDB_API_TOKEN` no `.env`. Nunca em arquivo versionado.
-2. Leia [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md): há restrições de ML e um cache máximo de 6 meses.
-
-```bash
-# coleta pequena (padrão: 50 por tipo; acima de 500 itens no total exige --yes)
-uv run cinematch ingest tmdb --types movie tv --max-items 50
-# expandir: buscar só itens novos (pula os sincronizados nos últimos 30 dias)
-uv run cinematch ingest tmdb --types movie --max-items 2500 --skip-synced-within-days 30 --yes
-# retomar run interrompido/parcial
-uv run cinematch ingest tmdb --resume <run_id>
-# acompanhar
-uv run cinematch ingest status [run_id]
-# retenção Bronze (máx. 180 dias, termos TMDB)
-uv run cinematch ingest purge-bronze --older-than-days 180
-```
-
-No container: `docker compose run --rm api cinematch ingest tmdb --max-items 50`. O Bronze fica no volume `bronze`; no host, em `./data/bronze`.
-
-Saída: JSON com `run_id`, `status` (`succeeded`/`partial`/`failed`) e métricas (`discovered`, `inserted`, `updated`, `unchanged`, `not_found`, `failed`, `http_requests`, `http_retries`, `http_rate_limited`, `duration_s`). Exit 0 só em `succeeded`.
-
-## Ingestão TVmaze e resolução de entidades
-
-API pública, sem chave, licença CC BY-SA 4.0 (ver [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)).
-
-```bash
-uv run cinematch reprocess tmdb                   # re-normaliza o Bronze TMDB (crosswalk, keywords, créditos), sem API
-uv run cinematch ingest tvmaze                    # 2 páginas (~500 shows), padrão
-uv run cinematch ingest tvmaze --all --yes        # índice completo (~300+ páginas, ~6 min a 1 req/s)
-uv run cinematch ingest tvmaze --resume <run_id>
-uv run cinematch link tvmaze                      # recalcula vínculos sem chamar a API
-```
-
-Os shows são ligados às séries do catálogo **somente** por IMDb/TheTVDB coincidentes; casos ambíguos não são ligados.
-
-## Features de conteúdo (extra `ml`)
-
-```bash
-uv sync --extra ml                                         # scikit-learn, sentence-transformers, torch CPU
-uv run --extra ml cinematch features tfidf                 # artefato TF-IDF versionado em data/artifacts
-uv run --extra ml cinematch features embeddings            # incremental; 1ª vez baixa o modelo (~470 MB)
-uv run --extra ml cinematch features neighbors <item_id> --method embedding|tfidf -k 10
-```
-
-Modelo padrão: `paraphrase-multilingual-MiniLM-L12-v2`. Configurável por `CINEMATCH_EMBEDDING_MODEL` e `CINEMATCH_EMBEDDING_REVISION`.
-
-## Snapshots Gold, retenção e avaliação
-
-```bash
-uv run --extra ml cinematch gold snapshot          # Parquet imutável + manifest; exige quality check sem falha
-uv run cinematch gold list
-uv run cinematch ingest tmdb-refresh --older-than-days 150 --max-items 2000   # renova itens antigos
-uv run cinematch catalog expire                    # simulação; --yes remove itens TMDB > 180 dias
-uv run --extra ml cinematch evaluate content-sanity --out docs/experiments/<arquivo>.json
-```
-
-## API de catálogo e recomendações
-
-```bash
-uv run --extra ml cinematch recs build-similar --method tfidf --activate --mlflow   # baseline servido
-uv run --extra ml cinematch recs build-similar --method rerank-logreg --mlflow      # challenger (inativo)
-uv run cinematch recs list                                   # conjuntos gravados e qual está ativo
-uv run cinematch recs activate '<model_version>'             # troca/rollback do conjunto servido
-docker compose up -d --build api                             # http://127.0.0.1:8010/docs
-uv run cinematch evaluate api-latency --out docs/experiments/<arquivo>.json
-```
-
-| Rota | Função |
+| Etapa | Como |
 |---|---|
-| `GET /genres` | gêneros com contagem de itens |
-| `GET /movies` | busca (`q`), filtros (`type`, `genre`, `year_from`, `year_to`), `sort=popular\|top_rated\|recent\|relevance`, paginação; omite não lançados salvo `include_unreleased=true` |
-| `GET /movies/{id}` | detalhe com elenco, direção, keywords e links externos |
-| `GET /movies/{id}/similar` | vizinhos do conjunto ativo, `max_per_collection` (diversidade), `reason`, `model_version`, `request_id`, `fallback` |
+| **Coleta TMDB** | Discover por popularidade e detalhe com `credits`, `keywords` e `external_ids`. Rate limit de 4 req/s, retry com `Retry-After`, checkpoint por item, retomada (`--resume`), lock por fonte. |
+| **Coleta TVmaze** | Varredura do índice (91.004 shows), 1 req/s, CC BY-SA 4.0. |
+| **Bronze** | Resposta bruta em JSONL.gz com proveniência (`run_id`, URI, data). Permite reprocessar tudo sem chamar a API (`cinematch reprocess tmdb`). |
+| **Normalização** | Catálogo, gêneros, keywords e créditos com minimização (elenco < 15, equipe-chave, sem gênero da pessoa). Upsert idempotente por hash de conteúdo. |
+| **Resolução de entidades** | TVmaze ↔ catálogo **só por IDs verificados** (IMDb/TVDB), com detecção de ambiguidade: 82,5% das séries ligadas, 0 ligações por similaridade de título. |
+| **Qualidade** | 28 checks (chaves, cobertura por tipo, frescor, queda de contagem, schema drift do Bronze, consistência dos embeddings) com histórico. Um check em falha bloqueia o snapshot Gold. |
+| **Gold** | Snapshots Parquet imutáveis com hash de conteúdo, manifesto e versões. Mesmo conteúdo, mesmo snapshot. |
+| **Retenção** | Os termos do TMDB pedem cache de no máximo 6 meses. `tmdb-refresh` renova os itens mais antigos e `catalog expire` remove o que passou do prazo. Itens com dados de usuário viram *tombstone* em vez de serem apagados. |
 
-Imagens vêm do CDN do TMDB; o frontend deve exibir a atribuição do TMDB. CORS: `CINEMATCH_CORS_ORIGINS` (lista JSON).
+Cobertura atual: pôster em 99,6% dos filmes e 97,9% das séries; sinopse em 99,5% e 92,6%; 2.832 filmes pertencem a uma coleção (franquia).
 
-## Experimentos de modelos e MLflow
+## Modelos
 
-MLflow exclusivo do CineMatch (não reusa MLflow de outros projetos):
+Todos usam o mesmo texto por item: título, sinopse, gêneros, keywords, direção e elenco principal.
+
+| Modelo | Ideia | Detalhes |
+|---|---|---|
+| **TF-IDF + cosseno** (baseline) | Similaridade lexical e de metadados | Unigramas e bigramas, `sublinear_tf`, tokens prefixados para gênero, keyword e pessoa (`person_christopher_nolan`), 50 mil termos |
+| **Sentence Transformers + cosseno** | Similaridade semântica da sinopse | `paraphrase-multilingual-MiniLM-L12-v2` (384 d, multilíngue: o app é em PT, os dados em EN), pesos fixados por commit do Hugging Face. Duas versões de texto: com título (`v1`) e sem título (`v2`) |
+| **RRF** | Fusão de ranks TF-IDF + embeddings | Reciprocal Rank Fusion, `c = 60` |
+| **Rocchio** | Expandir a consulta com feedback | PRF item → item: `q' = q + β·média(top-m)`. Perfil: `p = média(curtidos) − γ·média(não curtidos)` |
+| **Rerankers supervisionados** | Aprender a ordenar candidatos | Candidatos = top-50 TF-IDF ∪ top-50 embeddings (1,16 milhão de pares). 14 features (cossenos, ranks, Jaccard de gêneros e keywords, pessoas em comum, tipo, idioma, distância de ano, popularidade), **sem features de título**. LogisticRegression, SGD (log-loss) e LightGBM LambdaRank. |
+
+**Rótulo e validação.** Ainda não há interações de usuários, e a spec proíbe inventá-las. Por isso os modelos supervisionados aprendem um **rótulo fraco**: o candidato pertence à mesma coleção TMDB (franquia) da consulta.
+
+A validação é GroupKFold por coleção: uma franquia nunca aparece no treino e no teste ao mesmo tempo. Todas as métricas abaixo são **proxies de coerência, não relevância para pessoas**. Detalhes em [ADR-017](docs/DECISIONS.md).
+
+## Resultados
+
+Benchmark de 2026-11-11 com 12.497 itens, top-10 e os mesmos itens para todos os métodos (`cinematch evaluate similarity-models`). Os testes de franquia usam 2.216 filmes cuja coleção tem 2 ou mais membros no catálogo.
+
+| Método | Franquia: recall@10 | Franquia: nDCG@10 | Gênero em comum@10 | Palavra do título em comum@10 ↓ | Cobertura@10 | Hubness ↓ |
+|---|---|---|---|---|---|---|
+| TF-IDF | 0,942 | 0,896 | 0,810 | 0,130 | **0,997** | 0,072 |
+| Embeddings v1 (com título) | 0,850 | 0,776 | 0,856 | 0,199 | 0,946 | 0,090 |
+| Embeddings v2 (sem título) | 0,548 | 0,477 | 0,945 | **0,058** | 0,899 | 0,098 |
+| RRF (TF-IDF + emb v2) | 0,804 | 0,714 | 0,930 | 0,098 | 0,966 | 0,065 |
+| Rocchio PRF (TF-IDF) | 0,944 | 0,890 | 0,831 | 0,131 | 0,989 | 0,115 |
+| Reranker LogisticRegression | 0,967 | 0,940 | 0,966 | 0,127 | 0,982 | 0,052 |
+| Reranker SGD | 0,967 | 0,939 | 0,968 | 0,128 | 0,980 | 0,053 |
+| **Reranker LightGBM** | **0,971** | **0,952** | **0,974** | 0,140 | 0,985 | **0,047** |
+
+<sub>Hubness = fatia das recomendações ocupada pelo 1% de itens mais recomendados. IC 95% por bootstrap e recall por fold em [`docs/experiments/`](docs/experiments/).</sub>
+
+**Recomendação a partir de vários títulos** (2 filmes curtidos de uma franquia → achar o restante; 313 tarefas):
+
+| Estratégia | TF-IDF | Embeddings v2 |
+|---|---|---|
+| Só o primeiro título | 0,952 | 0,507 |
+| MaxSim (máximo por título) | 0,959 | 0,560 |
+| **Rocchio** (média dos vetores) | **0,972** | **0,611** |
+
+**Leitura**
+
+- **Rerankers:** melhoram ao mesmo tempo o proxy de franquia, a coerência de gênero e a hubness. O ganho em gênero e hubness é o mais informativo, porque o modelo não foi treinado nessas métricas.
+  - LightGBM ≈ regressão logística (diferença dentro do IC). Por isso o challenger é a logística: mais simples e explicável.
+  - Viés conhecido: como só filmes têm coleção, o modelo aprende "mesmo tipo" com peso alto.
+- **Embeddings:** tirar o título reduz o atalho lexical (0,199 → 0,058 de palavra do título em comum) e melhora a coerência de tema, mas perde o sinal de franquia. TF-IDF e embeddings capturam noções diferentes de "parecido".
+- **Rocchio de perfil:** supera um único título e MaxSim nas duas representações, por isso é a base do "Achamos que você vai gostar".
+
+Histórico dos experimentos: [similaridade de conteúdo](docs/experiments/content_similarity_2026-11-10.md) e [modelos](docs/experiments/similarity_models_2026-11-10.md). Para explorar interativamente, use o notebook [`models/similarity_models.ipynb`](models/similarity_models.ipynb).
+
+## Serving e personalização
+
+| | Como funciona |
+|---|---|
+| **Similares** (`/movies/{id}/similar`) | Top-50 vizinhos do conjunto ativo (TF-IDF), no máximo 3 por coleção (diversidade), motivo por sobreposição de metadados, fallback bayesiano por gênero. Resposta com `model_version` e `request_id`. |
+| **Para você** (`/recommendations/me`) | Rocchio no espaço de escores: `score(c) = Σ wₛ · sim(s, c)` sobre os vizinhos das sementes. Pesos: curtido e favorito +1, nota (n − 3)/2, não curtido −0,5. Exclui itens já vistos, no máximo 2 por coleção, motivo "Porque você curtiu X". Usuário novo recebe os mais bem avaliados dos gêneros escolhidos. |
+| **Ranking "mais bem avaliados"** | Média bayesiana por tipo: `(v·R + m·C)/(v + m)`, com m = percentil 75 de votos. Títulos com poucos votos não dominam. |
+| **Versões** | `recs build-similar` grava um conjunto de vizinhos versionado e registra o build no MLflow. `recs activate` troca o conjunto servido numa transação. O reranker fica gravado como challenger para teste A/B. |
+| **Eventos** | `POST /events`: impressões (≥ 50% visível por ≥ 1 s), cliques, favoritos e buscas, idempotentes por `event_id`, com `request_id`, posição e `model_version` para atribuição de exposição. |
+| **Segurança** | Senhas com Argon2id. Sessão opaca em cookie `httpOnly`/`SameSite=Lax`; o banco guarda só o hash do token. Checagem de `Origin` (CSRF), limite de tentativas de login, CSP no nginx, exclusão de conta em cascata. |
+
+Latência medida em 2026-11-11 no container da API (1 cliente sequencial, 300 requisições por endpoint, Postgres local):
+
+| Endpoint | p50 | p95 | p99 |
+|---|---|---|---|
+| `GET /movies/{id}/similar` | 11,7 ms | 18,8 ms | 26,7 ms |
+| `GET /movies/{id}` | 8,0 ms | 9,6 ms | 10,5 ms |
+| `GET /movies?q=…` (busca) | 16,9 ms | 22,2 ms | 25,6 ms |
+| `GET /movies?sort=popular` | 20,1 ms | 23,9 ms | 48,7 ms |
+
+A meta da especificação é p95 < 200 ms. A concorrência ainda não foi testada.
+
+## MLOps
+
+- **Reprodutibilidade:**
+  - TF-IDF identificado pelo hash do corpus.
+  - Embeddings versionados por `modelo@commit|versão_do_texto` e incrementais (só re-encoda texto alterado).
+  - Snapshots Gold com hash de conteúdo.
+  - `fingerprint` do conjunto de avaliação em cada run.
+- **MLflow** (servidor próprio no Compose): os experimentos `similarity-item2item` e `serving-similar` guardam parâmetros, métricas, IC, importância de features e o modelo serializado. Runs com rótulo fraco recebem a tag `label_kind=weak:tmdb_collection`.
+- **Qualidade como gate:** o `quality check` grava histórico, e um check em falha bloqueia o snapshot Gold.
+- **CI (GitHub Actions):**
+  - Backend: ruff, pytest com Postgres + pgvector e build da imagem.
+  - Frontend: typecheck, build e imagem nginx.
+- **Decisões documentadas:** 20 ADRs em [docs/DECISIONS.md](docs/DECISIONS.md), plano por fases com critérios de aceite em [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
+
+## Como rodar
+
+Requisitos: Docker com Compose v2 e [uv](https://docs.astral.sh/uv/). Para o frontend em modo dev, Node 22.
 
 ```bash
-docker compose up -d mlflow                     # UI em http://127.0.0.1:5010
-uv run --extra ml cinematch evaluate similarity-models --mlflow \
-    --out docs/experiments/<arquivo>.json       # cosseno, RRF, Rocchio, LR/SGD/LightGBM
+git clone https://github.com/felipesembay/CineMatch.git && cd CineMatch
+cp .env.example .env                        # defina POSTGRES_PASSWORD e TMDB_API_TOKEN
+uv sync --extra ml
+docker compose up -d --build postgres mlflow
+uv run cinematch db upgrade
+
+# dados (token TMDB gratuito: https://www.themoviedb.org/settings/api)
+uv run cinematch ingest tmdb --types movie tv --max-items 500 --yes
+uv run cinematch ingest tvmaze && uv run cinematch link tvmaze
+uv run cinematch quality check
+
+# features, modelos e vizinhos servidos
+uv run cinematch features tfidf
+uv run cinematch features embeddings --text-version emb_text_v2
+uv run cinematch recs build-similar --method tfidf --activate --mlflow
+
+docker compose up -d --build api web
 ```
 
-Notebook interativo (mesmo código, com gráficos, demo de perfil e revisão qualitativa):
+| Serviço | URL |
+|---|---|
+| App | http://127.0.0.1:8088 |
+| API (Swagger) | http://127.0.0.1:8010/docs |
+| MLflow | http://127.0.0.1:5010 |
 
-```bash
-uv sync --extra ml --group notebook
-uv run jupyter lab models/                      # abra similarity_models.ipynb
-```
+Todos os comandos (refresh, reprocessamento, Gold, benchmark, latência, testes de integração) estão em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-Os modelos supervisionados usam rótulo fraco (mesma coleção TMDB), não interações de usuários. Ver ADR-017.
-
-## Qualidade de dados
-
-```bash
-uv run cinematch quality check          # mostra só avisos/falhas; grava em data_quality_runs
-uv run cinematch quality check --all    # lista todos os checks
-uv run cinematch quality check --json   # relatório completo
-```
-
-Exit 1 quando algum check falha.
-
-## Testes de integração
-
-Requerem um banco cujo nome termine em `_test`. O schema é recriado a cada sessão.
-
-```bash
-docker compose exec postgres sh -c 'createdb -U "$POSTGRES_USER" cinematch_test'   # uma vez
-set -a; . ./.env; set +a
-CINEMATCH_TEST_DATABASE_URL="${CINEMATCH_DATABASE_URL%/*}/cinematch_test" uv run pytest
-```
-
-## Estrutura
+## Estrutura do repositório
 
 ```text
-src/cinematch/        pacote Python
-  api/                FastAPI (health)
-  data/schema.py      schema SQLAlchemy (fonte das migrações)
-  ingestion/          cliente HTTP com retry, Bronze, repositório, pipeline
-    tmdb/             adaptador TMDB (cliente + normalização)
-  similarity/         modelos de similaridade item-item e benchmark (rótulo fraco)
-  serving/            consultas de catálogo e vizinhos pré-computados (lidos pela API)
-  tracking.py         registro no MLflow
-  cli.py              comando `cinematch`
-models/               notebooks de experimentos
-migrations/           Alembic
-tests/                Pytest (unitários; integração com marcador `integration`)
-docs/                 plano de implementação e ADRs
-Dockerfile            imagem da API (multi-stage com uv, usuário não-root)
-docker-compose.yml    api + postgres (pgvector) + mlflow
+src/cinematch/
+  ingestion/      clientes TMDB/TVmaze (retry, rate limit), Bronze, normalização, pipelines
+  quality/        checks de qualidade com histórico
+  features/       texto por item, TF-IDF, embeddings (pgvector)
+  similarity/     modelos (cosseno, RRF, Rocchio, rerankers) e benchmark
+  serving/        consultas de catálogo, popularidade bayesiana, vizinhos versionados
+  users/          contas, sessões, interações, recomendação personalizada
+  api/            FastAPI (catálogo, usuários, eventos, health)
+  data/           schema SQLAlchemy e snapshots Gold
+  tracking.py     integração com MLflow
+  cli.py          comando `cinematch`
+frontend/cinematch/   React + Vite + Tailwind + TanStack Query (Dockerfile com nginx)
+models/               notebook de experimentos
+migrations/           Alembic (7 migrações)
+tests/                unitários e integração (Postgres real)
+docs/                 plano, ADRs, fontes de dados, experimentos, operação
 ```
 
-## Fontes de dados e atribuição
+**Stack:** Python 3.12, uv, FastAPI, SQLAlchemy/Alembic, PostgreSQL 16 + pgvector, scikit-learn, Sentence Transformers (PyTorch CPU), LightGBM, MLflow, PyArrow, React 19, Vite, Tailwind, TanStack Query, Zod, nginx, Docker Compose, GitHub Actions, Ruff, Pytest.
 
-This product uses the TMDB API but is not endorsed or certified by TMDB. Dados de séries complementares de [TVmaze](https://www.tvmaze.com) (CC BY-SA 4.0). Uso não comercial; ver restrições e risco aceito em [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) (ADR-008).
+## Limitações e próximos passos
 
-## Limitações conhecidas
+- **Métricas offline são proxies.** A escolha entre TF-IDF e reranker deve sair de um teste A/B com CTR e favoritos, já instrumentado via eventos com `model_version`.
+- **Filtragem colaborativa** (ALS/BPR) e ranking aprendido com interações reais só quando houver volume suficiente de usuários.
+- **Deploy em nuvem** (Azure PostgreSQL + containers), orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
+- **Conta:** sem verificação de e-mail nem recuperação de senha; o limitador de login é em memória (uma réplica).
+- **Termos do TMDB:** restringem o uso dos dados em ML. Este é um projeto de estudo, não comercial, com o risco registrado no [ADR-008](docs/DECISIONS.md).
 
-- Sem autenticação, API de catálogo ou recomendações (fases seguintes).
-- Os termos do TMDB restringem uso em ML (ADR-008, risco aceito pelo responsável).
-- CI escrita, mas não executada (repositório sem remoto).
+## Fontes de dados, atribuição e licença
+
+<img src="frontend/cinematch/public/tmdb-logo.svg" alt="TMDB" height="14"> This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+Dados de séries complementares de [TVmaze](https://www.tvmaze.com) ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)). Termos, proveniência e retenção em [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+
+Código sob a [licença MIT](LICENSE). Nenhum dado do TMDB/TVmaze é distribuído neste repositório.

@@ -1,7 +1,8 @@
 [project]
 name = "cinematch"
-version = "0.1.0"
+version = "0.2.0"
 description = "CineMatch: plataforma de recomendação de filmes e séries com pipeline de MLOps."
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +15,7 @@ dependencies = [
     "httpx>=0.27",
     "alembic>=1.13",
     "pgvector>=0.3",
+    "argon2-cffi>=23.1",
 ]
 
 [project.optional-dependencies]

@@ -7,7 +7,7 @@ import uuid
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from cinematch.logconfig import request_id_ctx
 
@@ -42,3 +42,24 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 },
             )
             request_id_ctx.reset(token)
+
+
+UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class OriginCheckMiddleware(BaseHTTPMiddleware):
+    """CSRF: rejeita métodos que alteram estado vindos de outra origem de navegador.
+
+    Navegadores sempre enviam `Origin` em requisições cross-site desse tipo; clientes sem
+    navegador (curl, testes) não enviam e passam. Complementa o cookie `SameSite=Lax`.
+    """
+
+    def __init__(self, app, allowed_origins: list[str]) -> None:
+        super().__init__(app)
+        self.allowed = frozenset(o.rstrip("/") for o in allowed_origins)
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        origin = request.headers.get("origin")
+        if request.method in UNSAFE_METHODS and origin and origin.rstrip("/") not in self.allowed:
+            return JSONResponse({"detail": "origem não permitida"}, status_code=403)
+        return await call_next(request)

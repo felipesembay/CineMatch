@@ -47,7 +47,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
+        "http://localhost:8088",  # frontend no docker-compose (nginx)
+        "http://127.0.0.1:8088",
     ]
+    # Sessão: cookie httpOnly com token opaco. `cookie_secure=true` em produção (HTTPS).
+    session_cookie_name: str = "cm_session"
+    session_ttl_days: int = Field(default=30, ge=1, le=365)
+    cookie_secure: bool = False
     # Imagens servidas direto pelo CDN do TMDB (atribuição obrigatória no frontend).
     tmdb_image_base_url: str = "https://image.tmdb.org/t/p"
     poster_size: str = "w342"

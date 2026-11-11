@@ -49,7 +49,7 @@ def engine(migrated_engine: Engine) -> Engine:
         conn.execute(
             text(
                 "TRUNCATE item_genres, genres, item_keywords, keywords, item_credits, people, "
-                "data_quality_runs, item_embeddings, neighbor_sets, item_neighbors, "
+                "data_quality_runs, item_embeddings, neighbor_sets, item_neighbors, users, events, "
                 "feature_artifacts, training_datasets, "
                 "item_external_ids, "
                 "catalog_items, tvmaze_shows, "

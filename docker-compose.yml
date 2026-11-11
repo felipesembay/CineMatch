@@ -34,6 +34,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  web:
+    # Frontend (React/Vite) servido pelo nginx; /api -> serviço `api`.
+    build: ./frontend/cinematch
+    image: cinematch-web:local
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-8088}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   mlflow:
     # Tracking server exclusivo do CineMatch (separado de outros projetos da máquina).
     # Metadados em SQLite e artefatos no volume `mlflow`; servidor faz proxy dos artefatos

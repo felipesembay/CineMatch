@@ -188,3 +188,27 @@ Formato curto: contexto → decisão → consequências. Status: **Aceita**, **P
 - **CORS:** lista explícita de origens (`CINEMATCH_CORS_ORIGINS`), só localhost por padrão.
 **Alternativas:** carregar o TF-IDF na API (exigiria scikit-learn na imagem, latência e memória maiores); busca vetorial em pgvector a cada requisição (útil para embeddings, desnecessária com 8 mil itens e vizinhos fixos).
 **Consequência:** vizinhos ficam desatualizados até o próximo build; itens novos caem no fallback até lá. Agendar o build após cada ingestão (Fase 6, Airflow).
+
+## ADR-019 — Frontend em React + Vite (em vez de Next.js)
+**Status:** Aceita (2026-11-11)
+**Contexto:** a spec sugere Next.js. O frontend foi gerado em React + Vite + Tailwind (protótipo externo) e integrado à API.
+**Decisão:** manter React + Vite.
+- O app é um SPA autenticado, sem necessidade de SSR/SEO por página.
+- Em dev, o Vite faz proxy de `/api` para o FastAPI; em produção, o nginx faz o mesmo proxy. Navegador e API ficam na mesma origem, o cookie de sessão é first-party (`SameSite=Lax`) e não há CORS.
+- Imagem do frontend: build estático + nginx com CSP, `X-Content-Type-Options` e `Referrer-Policy`.
+**Alternativas:** migrar para Next.js (custo de reescrita sem ganho funcional hoje).
+**Consequência:** se SEO de páginas de título virar requisito, reavaliar SSR.
+
+## ADR-020 — Contas, sessão, interações e recomendação personalizada (Fase 4)
+**Status:** Aceita (2026-11-11)
+**Decisão:**
+- **Contas:** e-mail + senha com hash **Argon2id**; nome de exibição opcional (PII mínima). Mensagem de erro de login genérica e verificação contra hash fictício quando o e-mail não existe (sem enumeração por tempo). Limite de 10 tentativas por IP + e-mail a cada 15 min (em memória, 1 réplica).
+- **Sessão:** token opaco aleatório (256 bits) em cookie `httpOnly`, `SameSite=Lax`, `Secure` em produção; o banco guarda só o SHA-256 do token; expira em 30 dias; logout apaga a sessão.
+- **CSRF:** além do `SameSite`, métodos que alteram estado com `Origin` fora da lista permitida recebem 403.
+- **LGPD:** `DELETE /users/me` apaga conta, sessões, preferências, favoritos e avaliações em cascata; eventos permanecem anonimizados (`user_id = NULL`).
+- **Interações:** curtidas/não curtidas do onboarding, favoritos e avaliações 1-5 com comentário (≤ 1.000 caracteres).
+- **Eventos (`POST /events`):** lote de até 100, idempotentes por `event_id` (UUID do cliente), tipos e superfícies validados, `occurred_at` não pode estar no futuro; `user_id` vem da sessão, nunca do corpo. Impressões levam `request_id`, posição e `model_version` (atribuição de exposição para A/B e avaliação offline futura).
+- **`/recommendations/me`:** Rocchio no espaço de escores sobre os vizinhos pré-computados ativos: `score(c) = Σ w_s · sim(s, c)`, com pesos +1 (curtido, favorito), (nota − 3)/2 (avaliação) e −0,5 (não curtido). Exclui itens já vistos; no máximo 2 por coleção; motivo "Porque você curtiu X". Sem sinais: fallback bayesiano nos gêneros preferidos. Determinístico para a mesma versão.
+- **Retenção:** itens TMDB expirados que têm dados de usuário viram *tombstone* (conteúdo TMDB apagado, ID mantido), em vez de DELETE em cascata.
+**Alternativas:** JWT em `localStorage` (exposto a XSS; rejeitado); Rocchio sobre vetores em pgvector a cada requisição (mais caro; o equivalente no espaço de escores reaproveita a versão servida no `/similar`).
+**Limitações:** limitador de login em memória (mover para Redis/Postgres com várias réplicas); sem verificação de e-mail nem recuperação de senha; sem dados reais ainda para avaliar a personalização online.
