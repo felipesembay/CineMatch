@@ -8,8 +8,8 @@ __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
-build/
-dist/
+/build/
+/dist/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -17,7 +17,7 @@ dist/
 htmlcov/
 
 # Dados locais (Bronze/Silver/Gold, checkpoints) — nunca versionar
-data/
+/data/
 *.jsonl.gz
 *.parquet
 
