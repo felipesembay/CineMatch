@@ -274,7 +274,7 @@ def cmd_catalog_expire(args: argparse.Namespace) -> int:
 def cmd_gold_snapshot(args: argparse.Namespace) -> int:
     from datetime import datetime
 
-    from cinematch.data.gold import SnapshotRefused, create_snapshot
+    from cinematch.data.gold import SnapshotRefusedError, create_snapshot
     from cinematch.db import get_engine
 
     try:
@@ -286,7 +286,7 @@ def cmd_gold_snapshot(args: argparse.Namespace) -> int:
             embedding_model_version=args.embedding_model_version,
             allow_failing_quality=args.allow_failing_quality,
         )
-    except SnapshotRefused as exc:
+    except SnapshotRefusedError as exc:
         print(f"erro: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(manifest, indent=2, default=str))

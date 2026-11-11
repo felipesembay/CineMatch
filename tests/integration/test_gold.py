@@ -13,7 +13,7 @@ from sqlalchemy import Engine, update
 pytest.importorskip("pyarrow")
 import pyarrow.parquet as pq
 
-from cinematch.data.gold import SnapshotRefused, create_snapshot
+from cinematch.data.gold import SnapshotRefusedError, create_snapshot
 from cinematch.data.schema import catalog_items, item_external_ids
 from cinematch.features.embeddings import compute_embeddings
 from cinematch.quality.checks import run_checks
@@ -38,7 +38,7 @@ def test_refused_without_quality_run(
     engine: Engine, fake: FakeTmdb, ingest: Any, tmp_path: Path
 ) -> None:
     ingest(item_types=["movie"], max_items_per_type=2)
-    with pytest.raises(SnapshotRefused, match="quality"):
+    with pytest.raises(SnapshotRefusedError, match="quality"):
         create_snapshot(engine, tmp_path)
     assert create_snapshot(engine, tmp_path, allow_failing_quality=True)["reused"] is False
 
@@ -49,7 +49,7 @@ def test_snapshot_contents_manifest_and_idempotence(
     ingest(item_types=["movie", "tv"], max_items_per_type=3)
     compute_embeddings(engine, FakeEncoder())
     assert run_checks(engine, None).status == "fail"  # factories sem elenco
-    with pytest.raises(SnapshotRefused):
+    with pytest.raises(SnapshotRefusedError):
         create_snapshot(engine, tmp_path)
     _passing_quality_run(engine)
 

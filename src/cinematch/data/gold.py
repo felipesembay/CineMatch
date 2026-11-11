@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_NAME = "catalog_items"
 
 
-class SnapshotRefused(RuntimeError):
+class SnapshotRefusedError(RuntimeError):
     pass
 
 
@@ -70,23 +70,37 @@ def _items_table(conn: Connection, as_of: datetime) -> pa.Table:
             directors=list(d.directors),
             cast=list(d.cast),
         )
-    schema = pa.schema([
-        ("item_id", pa.int64()), ("item_type", pa.string()), ("title", pa.string()),
-        ("original_title", pa.string()), ("overview", pa.string()),
-        ("overview_source", pa.string()), ("release_date", pa.date32()),
-        ("release_year", pa.int32()), ("original_language", pa.string()),
-        ("runtime_minutes", pa.int32()), ("status", pa.string()),
-        ("popularity", pa.float64()), ("vote_average", pa.float64()),
-        ("vote_count", pa.int64()),
-        ("collection_id", pa.int64()),
-        ("collection_name", pa.string()),
-        ("poster_path", pa.string()),
-        ("backdrop_path", pa.string()), ("genres", pa.list_(pa.string())),
-        ("keywords", pa.list_(pa.string())), ("directors", pa.list_(pa.string())),
-        ("cast", pa.list_(pa.string())), ("tmdb_id", pa.string()), ("imdb_id", pa.string()),
-        ("tvmaze_id", pa.string()), ("first_seen_at", pa.timestamp("us", tz="UTC")),
-        ("last_synced_at", pa.timestamp("us", tz="UTC")),
-    ])
+    schema = pa.schema(
+        [
+            ("item_id", pa.int64()),
+            ("item_type", pa.string()),
+            ("title", pa.string()),
+            ("original_title", pa.string()),
+            ("overview", pa.string()),
+            ("overview_source", pa.string()),
+            ("release_date", pa.date32()),
+            ("release_year", pa.int32()),
+            ("original_language", pa.string()),
+            ("runtime_minutes", pa.int32()),
+            ("status", pa.string()),
+            ("popularity", pa.float64()),
+            ("vote_average", pa.float64()),
+            ("vote_count", pa.int64()),
+            ("collection_id", pa.int64()),
+            ("collection_name", pa.string()),
+            ("poster_path", pa.string()),
+            ("backdrop_path", pa.string()),
+            ("genres", pa.list_(pa.string())),
+            ("keywords", pa.list_(pa.string())),
+            ("directors", pa.list_(pa.string())),
+            ("cast", pa.list_(pa.string())),
+            ("tmdb_id", pa.string()),
+            ("imdb_id", pa.string()),
+            ("tvmaze_id", pa.string()),
+            ("first_seen_at", pa.timestamp("us", tz="UTC")),
+            ("last_synced_at", pa.timestamp("us", tz="UTC")),
+        ]
+    )
     return pa.Table.from_pylist(rows, schema=schema)
 
 
@@ -101,10 +115,12 @@ def _embeddings_table(
     ).all()
     rows = [(i, np.asarray(v, dtype=np.float32)) for i, v in rows if i in item_ids]
     dim = int(rows[0][1].shape[0]) if rows else 0
-    table = pa.table({
-        "item_id": pa.array([i for i, _ in rows], pa.int64()),
-        "embedding": pa.array([v.tolist() for _, v in rows], pa.list_(pa.float32(), dim)),
-    })
+    table = pa.table(
+        {
+            "item_id": pa.array([i for i, _ in rows], pa.int64()),
+            "embedding": pa.array([v.tolist() for _, v in rows], pa.list_(pa.float32(), dim)),
+        }
+    )
     return table, dim
 
 
@@ -128,9 +144,12 @@ def _file_sha256(path: Path) -> str:
 
 def _git_commit() -> str | None:
     try:
-        out = subprocess.run(  # noqa: S603 - comando fixo, sem entrada externa
+        out = subprocess.run(
             ["git", "rev-parse", "HEAD"],  # noqa: S607
-            capture_output=True, text=True, timeout=5, check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
         )
         return out.stdout.strip() or None
     except (OSError, subprocess.SubprocessError):
@@ -149,21 +168,26 @@ def create_snapshot(
     with engine.connect() as conn:
         quality = conn.execute(
             select(data_quality_runs.c.id, data_quality_runs.c.status, data_quality_runs.c.ran_at)
-            .order_by(desc(data_quality_runs.c.id)).limit(1)
+            .order_by(desc(data_quality_runs.c.id))
+            .limit(1)
         ).first()
         if not allow_failing_quality and (quality is None or quality.status == "fail"):
-            raise SnapshotRefused(
+            raise SnapshotRefusedError(
                 "último quality check ausente ou com falha; rode `cinematch quality check`"
             )
         items = _items_table(conn, as_of)
         if items.num_rows == 0:
-            raise SnapshotRefused(f"nenhum item visto até {as_of.isoformat()}")
-        mv = embedding_model_version or conn.execute(
-            text("SELECT model_version FROM item_embeddings ORDER BY created_at DESC LIMIT 1")
-        ).scalar()
+            raise SnapshotRefusedError(f"nenhum item visto até {as_of.isoformat()}")
+        mv = (
+            embedding_model_version
+            or conn.execute(
+                text("SELECT model_version FROM item_embeddings ORDER BY created_at DESC LIMIT 1")
+            ).scalar()
+        )
         emb, dim = (
             _embeddings_table(conn, mv, set(items.column("item_id").to_pylist()))
-            if mv else (None, 0)
+            if mv
+            else (None, 0)
         )
         alembic_rev = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
 
@@ -199,8 +223,9 @@ def create_snapshot(
         "created_at": datetime.now(UTC).isoformat(),
         "content_hash": content_hash,
         "table_hashes": hashes,
-        "files": {f: {"sha256": _file_sha256(out / f), "rows": t.num_rows}
-                  for f, t in files.items()},
+        "files": {
+            f: {"sha256": _file_sha256(out / f), "rows": t.num_rows} for f, t in files.items()
+        },
         "rows_by_type": {c["item_type"]: c["item_id_count"] for c in counts},
         "filters": {"first_seen_at_lte": as_of.isoformat()},
         "item_features_point_in_time": False,
@@ -213,7 +238,8 @@ def create_snapshot(
         "pyarrow_version": pa.__version__,
         "quality_run": (
             {"id": quality.id, "status": quality.status, "ran_at": quality.ran_at.isoformat()}
-            if quality else None
+            if quality
+            else None
         ),
         "sources": {"tmdb": "ver docs/DATA_SOURCES.md (ADR-008)", "tvmaze": "CC BY-SA 4.0"},
     }
@@ -223,8 +249,12 @@ def create_snapshot(
     with engine.begin() as conn:
         conn.execute(
             pg_insert(training_datasets).values(
-                name=name, snapshot_id=snapshot_id, as_of=as_of, content_hash=content_hash,
-                uri=out.as_uri(), manifest=manifest,
+                name=name,
+                snapshot_id=snapshot_id,
+                as_of=as_of,
+                content_hash=content_hash,
+                uri=out.as_uri(),
+                manifest=manifest,
             )
         )
     logger.info("gold_snapshot_created", extra={"snapshot_id": snapshot_id, "uri": out.as_uri()})

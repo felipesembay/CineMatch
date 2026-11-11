@@ -68,8 +68,11 @@ catalog_items = Table(
     _ts("updated_at"),
     CheckConstraint("item_type IN ('movie', 'tv')", name="item_type"),
 )
-Index("ix_catalog_items_item_type_release_year", catalog_items.c.item_type,
-      catalog_items.c.release_year)
+Index(
+    "ix_catalog_items_item_type_release_year",
+    catalog_items.c.item_type,
+    catalog_items.c.release_year,
+)
 
 item_external_ids = Table(
     "item_external_ids",
@@ -128,9 +131,7 @@ ingestion_runs = Table(
     Column("error", Text),
     _ts("started_at"),
     Column("finished_at", DateTime(timezone=True)),
-    CheckConstraint(
-        "status IN ('running', 'succeeded', 'partial', 'failed')", name="status"
-    ),
+    CheckConstraint("status IN ('running', 'succeeded', 'partial', 'failed')", name="status"),
 )
 
 ingestion_run_items = Table(
@@ -148,12 +149,13 @@ ingestion_run_items = Table(
     Column("attempts", Integer, nullable=False, server_default="0"),
     Column("last_error", Text),
     _ts("updated_at"),
-    CheckConstraint(
-        "status IN ('pending', 'done', 'failed', 'not_found')", name="status"
-    ),
+    CheckConstraint("status IN ('pending', 'done', 'failed', 'not_found')", name="status"),
 )
-Index("ix_ingestion_run_items_run_id_status", ingestion_run_items.c.run_id,
-      ingestion_run_items.c.status)
+Index(
+    "ix_ingestion_run_items_run_id_status",
+    ingestion_run_items.c.run_id,
+    ingestion_run_items.c.status,
+)
 
 # Silver específica do TVmaze (CC BY-SA 4.0). Ligação ao catálogo via item_external_ids.
 tvmaze_shows = Table(
@@ -203,9 +205,7 @@ item_keywords = Table(
     Column(
         "item_id", BigInteger, ForeignKey("catalog_items.id", ondelete="CASCADE"), primary_key=True
     ),
-    Column(
-        "keyword_id", Integer, ForeignKey("keywords.id", ondelete="CASCADE"), primary_key=True
-    ),
+    Column("keyword_id", Integer, ForeignKey("keywords.id", ondelete="CASCADE"), primary_key=True),
 )
 
 # Minimização (LGPD/spec §5): só nome e departamento; sem gênero, foto ou biografia.
@@ -333,12 +333,16 @@ item_neighbors = Table(
         primary_key=True,
     ),
     Column(
-        "item_id", BigInteger, ForeignKey("catalog_items.id", ondelete="CASCADE"),
+        "item_id",
+        BigInteger,
+        ForeignKey("catalog_items.id", ondelete="CASCADE"),
         primary_key=True,
     ),
     Column("rank", SmallInteger, primary_key=True),
     Column(
-        "neighbor_id", BigInteger, ForeignKey("catalog_items.id", ondelete="CASCADE"),
+        "neighbor_id",
+        BigInteger,
+        ForeignKey("catalog_items.id", ondelete="CASCADE"),
         nullable=False,
     ),
     Column("score", Float, nullable=False),
