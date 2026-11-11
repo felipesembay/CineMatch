@@ -10,7 +10,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from cinematch.data.schema import (
     catalog_items,
     events,
+    oauth_states,
     user_favorites,
+    user_identities,
     user_item_feedback,
     user_preferences,
     user_ratings,
@@ -231,3 +233,84 @@ UNION SELECT item_id FROM user_ratings WHERE user_id = :u"""),
         {"u": user_id},
     )
     return set(rows.scalars())
+
+
+# --- login social ------------------------------------------------------------------------
+
+OAUTH_STATE_TTL = timedelta(minutes=10)
+
+
+def save_oauth_state(
+    conn: Connection,
+    provider: str,
+    state: str,
+    nonce: str,
+    verifier: str,
+    redirect_uri: str,
+    next_path: str,
+) -> None:
+    conn.execute(
+        delete(oauth_states).where(oauth_states.c.created_at < datetime.now(UTC) - OAUTH_STATE_TTL)
+    )
+    conn.execute(
+        insert(oauth_states).values(
+            state_hash=token_hash(state),
+            provider=provider,
+            nonce=nonce,
+            code_verifier=verifier,
+            redirect_uri=redirect_uri,
+            next_path=next_path,
+        )
+    )
+
+
+def pop_oauth_state(conn: Connection, provider: str, state: str) -> Any | None:
+    """Consome o estado (uso único). None se não existe, expirou ou é de outro provedor."""
+    return conn.execute(
+        delete(oauth_states)
+        .where(
+            oauth_states.c.state_hash == token_hash(state),
+            oauth_states.c.provider == provider,
+            oauth_states.c.created_at >= datetime.now(UTC) - OAUTH_STATE_TTL,
+        )
+        .returning(oauth_states)
+    ).first()
+
+
+def user_for_identity(
+    conn: Connection, provider: str, subject: str, email: str, name: str | None
+) -> tuple[dict[str, Any], str]:
+    """Usuário da identidade social. Retorna (usuário, "existing" | "linked" | "created").
+
+    Conta com o mesmo e-mail criada por senha: o provedor comprovou a posse do e-mail, mas o
+    cadastro por senha não (não há verificação de e-mail). Para evitar sequestro de conta
+    pré-criada, o vínculo invalida a senha anterior e encerra todas as sessões da conta.
+    """
+    row = conn.execute(
+        select(users)
+        .join(user_identities, user_identities.c.user_id == users.c.id)
+        .where(user_identities.c.provider == provider, user_identities.c.subject == subject)
+    ).first()
+    if row:
+        return _user_dict(row), "existing"
+    existing = conn.execute(
+        select(users).where(func.lower(users.c.email) == email.lower()).with_for_update()
+    ).first()
+    if existing:
+        conn.execute(update(users).where(users.c.id == existing.id).values(password_hash=None))
+        conn.execute(delete(user_sessions).where(user_sessions.c.user_id == existing.id))
+        user_id, outcome = existing.id, "linked"
+    else:
+        user_id = conn.execute(
+            insert(users)
+            .values(email=email, password_hash=None, display_name=(name or None) and name[:80])
+            .returning(users.c.id)
+        ).scalar_one()
+        outcome = "created"
+    conn.execute(
+        insert(user_identities).values(
+            provider=provider, subject=subject, user_id=user_id, email=email
+        )
+    )
+    row = conn.execute(select(users).where(users.c.id == user_id)).one()
+    return _user_dict(row), outcome

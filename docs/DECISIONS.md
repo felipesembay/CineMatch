@@ -212,3 +212,25 @@ Formato curto: contexto → decisão → consequências. Status: **Aceita**, **P
 - **Retenção:** itens TMDB expirados que têm dados de usuário viram *tombstone* (conteúdo TMDB apagado, ID mantido), em vez de DELETE em cascata.
 **Alternativas:** JWT em `localStorage` (exposto a XSS; rejeitado); Rocchio sobre vetores em pgvector a cada requisição (mais caro; o equivalente no espaço de escores reaproveita a versão servida no `/similar`).
 **Limitações:** limitador de login em memória (mover para Redis/Postgres com várias réplicas); sem verificação de e-mail nem recuperação de senha; sem dados reais ainda para avaliar a personalização online.
+
+## ADR-021 — Banco no Azure por cópia completa (`pg_dump`/`pg_restore`)
+**Status:** Aceita (2026-11-11)
+**Contexto:** o responsável quer o banco em nuvem (Azure Database for PostgreSQL Flexible Server), mantendo todo o resto igual e sem recalcular features e vizinhos.
+**Decisão:**
+- Cópia completa por `pg_dump -Fc --no-owner --no-privileges` + `pg_restore --jobs 4 --exit-on-error`, com cliente PostgreSQL 16 (imagem `pgvector/pgvector:pg16`). `COMMENT ON EXTENSION` é filtrado (o admin do Azure não é superusuário). `ANALYZE` ao final.
+- Checagens antes (conexão TLS, versão, `vector` disponível/liberado em `azure.extensions`, destino vazio) e verificação depois (contagem exata por tabela, revisão Alembic, conjunto de vizinhos ativo).
+- Credenciais só no `.env`; o script passa para o cliente por variáveis `PG*` (nunca na linha de comando nem na saída).
+- API e CLI apontam para o Azure por variável (`CINEMATCH_API_DATABASE_URL` / `CINEMATCH_DATABASE_URL`, `sslmode=require`); o banco local fica como rollback.
+**Alternativas:** Azure Database Migration Service (mais pesado para 0,9 GB); recalcular no destino (desperdiça o que já está versionado e validado).
+**Riscos:** latência maior por requisição (rede até o Azure) — remedir `evaluate api-latency` após a troca; custo de armazenamento (os 2 conjuntos de vizinhos antigos de 8 mil itens ocupam ~250 MB e podem ser removidos).
+
+## ADR-022 — Login com Google (OAuth 2.0 + OpenID Connect)
+**Status:** Aceita (2026-11-11)
+**Decisão:**
+- Fluxo *Authorization Code* no backend, com `state` (anti-CSRF; guardado em hash no banco e em cookie `httpOnly`), PKCE S256 e `nonce`. Estado de uso único, válido por 10 min.
+- ID token validado localmente: assinatura RS256 com as chaves públicas do Google (JWKS em cache de 1 h), `iss`, `aud`, `exp`, `nonce` e `email_verified`.
+- Identidade por `sub` em `user_identities`; a sessão é a mesma do login por senha (cookie `httpOnly`).
+- **Conta com senha e mesmo e-mail:** o Google comprova a posse do e-mail, mas o cadastro por senha não tem verificação. O vínculo anula a senha anterior e encerra todas as sessões da conta (impede sequestro de conta pré-criada por terceiros).
+- `redirect_uri` derivado da origem do navegador (Host preservado pelo proxy) e aceito só se a origem estiver na lista permitida; `next` só aceita caminhos relativos (sem open redirect).
+**Alternativas:** Google Identity Services só no frontend (token no navegador; exigiria validar no backend do mesmo jeito); bibliotecas como Authlib (mais dependências para um único provedor).
+**Consequência:** novos provedores reaproveitam `user_identities` e `oauth_states`.

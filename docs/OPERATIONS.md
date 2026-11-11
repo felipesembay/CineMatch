@@ -148,3 +148,38 @@ docker compose exec postgres sh -c 'createdb -U "$POSTGRES_USER" cinematch_test'
 set -a; . ./.env; set +a
 CINEMATCH_TEST_DATABASE_URL="${CINEMATCH_DATABASE_URL%/*}/cinematch_test" uv run pytest
 ```
+
+## Banco no Azure (migração completa)
+
+Copia o banco local inteiro (catálogo, features, vizinhos, usuários, histórico) para o Azure Database for PostgreSQL Flexible Server. Nada é recalculado. Ensaio local em 2026-11-11: 896 MB em ~20 s, contagens idênticas em todas as tabelas, com usuário sem privilégio de superusuário (como o admin do Azure).
+
+1. **No portal do Azure (servidor):**
+   - *Server parameters* → `azure.extensions` → marque **VECTOR** → *Save*.
+   - *Networking* → adicione o IP desta máquina às regras de firewall.
+   - *Databases* → crie o banco `cinematch` (vazio).
+2. **No `.env`:** `CINEMATCH_MIGRATION_TARGET_URL=postgresql://USUARIO:SENHA@SERVIDOR.postgres.database.azure.com:5432/cinematch?sslmode=require`. Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`).
+3. **Migrar:**
+   ```bash
+   docker compose stop api           # sem escritas durante a cópia
+   scripts/migrate_db.sh check       # conexão, versão, pgvector liberado, destino vazio
+   scripts/migrate_db.sh run         # pg_dump -> pg_restore -> ANALYZE -> contagens exatas
+   ```
+4. **Apontar a aplicação para o Azure** (no `.env`):
+   ```bash
+   CINEMATCH_DATABASE_URL=postgresql+psycopg://USUARIO:SENHA@SERVIDOR.postgres.database.azure.com:5432/cinematch?sslmode=require
+   CINEMATCH_API_DATABASE_URL=${CINEMATCH_DATABASE_URL}   # usado pelo container da API
+   CINEMATCH_DB_CONNECT_TIMEOUT_S=10
+   ```
+   Depois: `docker compose up -d api` e `curl -s localhost:8010/health/ready`.
+5. **Rollback:** remova `CINEMATCH_API_DATABASE_URL` (e volte `CINEMATCH_DATABASE_URL` para `localhost:5434`). O banco local continua intacto.
+
+`scripts/migrate_db.sh verify` compara de novo as contagens a qualquer momento. O dump fica em `data/migration/` (fora do Git). Testes de integração continuam usando o banco local `cinematch_test`; MLflow continua local.
+
+## Login com Google
+
+1. Google Cloud Console → *APIs e serviços* → *Tela de consentimento OAuth* (tipo Externo, escopos `openid`, `email`, `profile`).
+2. *Credenciais* → *Criar ID do cliente OAuth* → **Aplicativo da Web**. URIs de redirecionamento autorizados:
+   - `http://localhost:5173/api/auth/google/callback` (Vite em dev)
+   - `http://localhost:8088/api/auth/google/callback` (nginx no Compose)
+3. No `.env`: `CINEMATCH_GOOGLE_CLIENT_ID` e `CINEMATCH_GOOGLE_CLIENT_SECRET`. Reinicie a API. O botão "Continuar com Google" aparece no login quando `GET /auth/providers` devolve `google: true`.
+4. Acesse o app por `localhost` (não `127.0.0.1`): o `redirect_uri` é montado a partir da origem do navegador e precisa estar cadastrado.

@@ -11,6 +11,7 @@ export const favoritesSchema=z.array(itemSummarySchema);
 export const userSchema=z.object({id:z.number(),email:z.string(),name:z.string(),onboarded:z.boolean()});
 export const ratingSchema=z.object({item:itemSummarySchema,value:z.number().int().min(1).max(5),comment:z.string().nullable(),updated_at:z.string()});
 export const ratingsSchema=z.array(ratingSchema);
+export const providersSchema=z.object({password:z.boolean(),google:z.boolean()});
 export const eventAckSchema=z.object({ok:z.boolean(),accepted:z.number(),duplicates:z.number()});
 export type ItemSummary=z.infer<typeof itemSummarySchema>;
 export type ItemDetail=z.infer<typeof itemDetailSchema>;

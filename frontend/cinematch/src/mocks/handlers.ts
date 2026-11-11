@@ -15,6 +15,7 @@ if(p==='/ratings'&&method==='POST'){const {item_id,value,comment}=body as {item_
 const rdel=p.match(/^\/ratings\/(\d+)$/);if(rdel&&method==='DELETE'){delete store.ratings[Number(rdel[1])];return {ok:true};}
 if(p==='/users/me/ratings')return Object.entries(store.ratings).map(([id,r])=>({item:titles.find(t=>t.id===Number(id))!,...r})).filter(r=>r.item);
 if(p==='/auth/login'||p==='/auth/register'){const {email,name}=body as {email:string;name?:string};store.user={id:1,email,name:name||email.split('@')[0],onboarded:false};return store.user;}
+if(p==='/auth/providers')return {password:true,google:false};
 if(p==='/auth/me'){if(!store.user)throw Error('401');return store.user;}
 if(p==='/auth/logout'||(p==='/users/me'&&method==='DELETE')){store.user=null;return {ok:true};}
 if(p==='/events'&&method==='POST')return {ok:true,accepted:(body as {events:unknown[]}).events.length,duplicates:0};throw Error(`Rota mock não encontrada: ${method} ${p}`);}

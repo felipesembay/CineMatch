@@ -357,7 +357,7 @@ users = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, autoincrement=True),
     Column("email", String(254), nullable=False),
-    Column("password_hash", Text, nullable=False),
+    Column("password_hash", Text),  # NULL = conta só com login social (ex.: Google)
     Column("display_name", String(80)),
     Column("onboarded_at", DateTime(timezone=True)),
     _ts("created_at"),
@@ -450,3 +450,29 @@ events = Table(
 )
 Index("ix_events_user_id_occurred_at", events.c.user_id, events.c.occurred_at)
 Index("ix_events_request_id", events.c.request_id)
+
+
+# Login social (OpenID Connect). `subject` é o ID estável do usuário no provedor (`sub`).
+user_identities = Table(
+    "user_identities",
+    metadata,
+    Column("provider", String(16), primary_key=True),
+    Column("subject", String(255), primary_key=True),
+    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("email", String(254)),
+    _ts("created_at"),
+)
+Index("ix_user_identities_user_id", user_identities.c.user_id)
+
+# Estado de autorização OAuth (anti-CSRF, PKCE e nonce). Válido por 10 minutos, uso único.
+oauth_states = Table(
+    "oauth_states",
+    metadata,
+    Column("state_hash", String(64), primary_key=True),
+    Column("provider", String(16), nullable=False),
+    Column("nonce", String(64), nullable=False),
+    Column("code_verifier", String(128), nullable=False),
+    Column("redirect_uri", Text, nullable=False),
+    Column("next_path", String(200), nullable=False),
+    _ts("created_at"),
+)

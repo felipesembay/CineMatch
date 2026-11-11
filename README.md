@@ -12,7 +12,7 @@
 | **Modelos comparados** | TF-IDF, Sentence Transformers, RRF, Rocchio, LogisticRegression, SGD, LightGBM (LambdaRank) |
 | **Em produção** | similares por TF-IDF (vizinhos pré-computados) + recomendação personalizada por Rocchio |
 | **Latência** | `/movies/{id}/similar`: p95 18,8 ms (local, 1 cliente) |
-| **Qualidade** | 148 testes (unitários + integração com Postgres), lint e build no CI |
+| **Qualidade** | 159 testes (unitários + integração com Postgres), lint e build no CI |
 
 ---
 
@@ -39,7 +39,7 @@
 - **Minha lista:**
   - "Achamos que você vai gostar", gerado a partir do que você curtiu, favoritou e avaliou.
   - Abas de favoritos, avaliados e comentados, e curtidos.
-- **Conta:** cadastro, login, avaliação de 1 a 5 com comentário e exclusão da conta com todos os dados (LGPD).
+- **Conta:** cadastro com e-mail ou **login com Google**, avaliação de 1 a 5 com comentário e exclusão da conta com todos os dados (LGPD).
 
 ## Arquitetura
 
@@ -156,7 +156,7 @@ Histórico dos experimentos: [similaridade de conteúdo](docs/experiments/conten
 | **Ranking "mais bem avaliados"** | Média bayesiana por tipo: `(v·R + m·C)/(v + m)`, com m = percentil 75 de votos. Títulos com poucos votos não dominam. |
 | **Versões** | `recs build-similar` grava um conjunto de vizinhos versionado e registra o build no MLflow. `recs activate` troca o conjunto servido numa transação. O reranker fica gravado como challenger para teste A/B. |
 | **Eventos** | `POST /events`: impressões (≥ 50% visível por ≥ 1 s), cliques, favoritos e buscas, idempotentes por `event_id`, com `request_id`, posição e `model_version` para atribuição de exposição. |
-| **Segurança** | Senhas com Argon2id. Sessão opaca em cookie `httpOnly`/`SameSite=Lax`; o banco guarda só o hash do token. Checagem de `Origin` (CSRF), limite de tentativas de login, CSP no nginx, exclusão de conta em cascata. |
+| **Segurança** | Login com Google (OAuth 2.0 + OpenID Connect com PKCE, `state` e `nonce`; ID token validado com as chaves públicas do Google). Senhas com Argon2id. Sessão opaca em cookie `httpOnly`/`SameSite=Lax`; o banco guarda só o hash do token. Checagem de `Origin` (CSRF), limite de tentativas de login, CSP no nginx, exclusão de conta em cascata. |
 
 Latência medida em 2026-11-11 no container da API (1 cliente sequencial, 300 requisições por endpoint, Postgres local):
 
@@ -181,7 +181,7 @@ A meta da especificação é p95 < 200 ms. A concorrência ainda não foi testad
 - **CI (GitHub Actions):**
   - Backend: ruff, pytest com Postgres + pgvector e build da imagem.
   - Frontend: typecheck, build e imagem nginx.
-- **Decisões documentadas:** 20 ADRs em [docs/DECISIONS.md](docs/DECISIONS.md), plano por fases com critérios de aceite em [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
+- **Decisões documentadas:** 22 ADRs em [docs/DECISIONS.md](docs/DECISIONS.md), plano por fases com critérios de aceite em [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
 ## Como rodar
 
@@ -231,8 +231,9 @@ src/cinematch/
   cli.py          comando `cinematch`
 frontend/cinematch/   React + Vite + Tailwind + TanStack Query (Dockerfile com nginx)
 models/               notebook de experimentos
-migrations/           Alembic (7 migrações)
+migrations/           Alembic (8 migrações)
 tests/                unitários e integração (Postgres real)
+scripts/              migração do banco para outro PostgreSQL (ex.: Azure)
 docs/                 plano, ADRs, fontes de dados, experimentos, operação
 ```
 
@@ -242,8 +243,8 @@ docs/                 plano, ADRs, fontes de dados, experimentos, operação
 
 - **Métricas offline são proxies.** A escolha entre TF-IDF e reranker deve sair de um teste A/B com CTR e favoritos, já instrumentado via eventos com `model_version`.
 - **Filtragem colaborativa** (ALS/BPR) e ranking aprendido com interações reais só quando houver volume suficiente de usuários.
-- **Deploy em nuvem** (Azure PostgreSQL + containers), orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
-- **Conta:** sem verificação de e-mail nem recuperação de senha; o limitador de login é em memória (uma réplica).
+- **Nuvem:** migração completa do banco para Azure Database for PostgreSQL já automatizada e ensaiada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Próximos: containers na nuvem, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
+- **Conta:** cadastro por senha sem verificação de e-mail nem recuperação de senha (o login com Google cobre esse caso); o limitador de login é em memória (uma réplica).
 - **Termos do TMDB:** restringem o uso dos dados em ML. Este é um projeto de estudo, não comercial, com o risco registrado no [ADR-008](docs/DECISIONS.md).
 
 ## Fontes de dados, atribuição e licença

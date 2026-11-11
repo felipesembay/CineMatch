@@ -50,6 +50,7 @@ def engine(migrated_engine: Engine) -> Engine:
             text(
                 "TRUNCATE item_genres, genres, item_keywords, keywords, item_credits, people, "
                 "data_quality_runs, item_embeddings, neighbor_sets, item_neighbors, users, events, "
+                "oauth_states, "
                 "feature_artifacts, training_datasets, "
                 "item_external_ids, "
                 "catalog_items, tvmaze_shows, "

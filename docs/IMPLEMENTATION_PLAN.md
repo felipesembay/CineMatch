@@ -232,6 +232,8 @@ Fases 2–6 serão detalhadas apenas quando a fase anterior for aceita.
 | 4.6 | Imagem do frontend (nginx + proxy `/api`) no Compose; job de frontend no CI | ✅ | `docker compose up` → `http://127.0.0.1:8088` |
 | 4.7 | Tombstone na expiração de itens com dados de usuário | ✅ | `test_expire_tombstones_items_with_user_data` |
 | 4.8 | Teste A/B TF-IDF × reranker (atribuição por `model_version`) | pendente | requer tráfego real |
+| 4.9 | Login com Google (OIDC + PKCE + nonce), vínculo seguro com conta por senha | ✅ | `tests/integration/test_google_login.py` (11 testes) |
+| 4.10 | Migração completa para Azure PostgreSQL (`scripts/migrate_db.sh`), ensaiada localmente com usuário não superusuário | ✅ script / ⏳ execução | aguarda servidor Azure com `VECTOR` liberado |
 
 **Aceite da Fase 4**
 - [x] Eventos rastreáveis (`request_id`, `model_version`, posição), idempotentes e validados.

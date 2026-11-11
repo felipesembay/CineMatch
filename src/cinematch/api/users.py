@@ -2,10 +2,14 @@
 
 import logging
 import re
+import secrets
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Engine
 
@@ -16,6 +20,7 @@ from cinematch.logconfig import request_id_ctx
 from cinematch.serving import catalog as cat
 from cinematch.serving.neighbors import active_version
 from cinematch.users import repository as repo
+from cinematch.users.google import GoogleAuthError, GoogleClient, new_pkce
 from cinematch.users.recommend import personalized
 from cinematch.users.security import AttemptLimiter, hash_password, verify_password
 
@@ -208,6 +213,137 @@ def delete_me(user: UserDep, response: Response, engine: EngineDep, settings: Se
     response.delete_cookie(settings.session_cookie_name, path="/")
     logger.info("user_deleted", extra={"user_id": user["id"]})
     return Ok()
+
+
+# --- login com Google -------------------------------------------------------------------
+
+OAUTH_COOKIE = "cm_oauth_state"
+
+
+@lru_cache(maxsize=1)
+def _google_client(client_id: str, client_secret: str) -> GoogleClient:
+    return GoogleClient(client_id, client_secret)
+
+
+def get_google_client(settings: SettingsDep) -> GoogleClient | None:
+    if not (settings.google_client_id and settings.google_client_secret):
+        return None
+    return _google_client(
+        settings.google_client_id, settings.google_client_secret.get_secret_value()
+    )
+
+
+GoogleDep = Annotated[GoogleClient | None, Depends(get_google_client)]
+
+
+class Providers(BaseModel):
+    password: bool = True
+    google: bool
+
+
+def _public_origin(request: Request, settings: Settings) -> str:
+    """Origem que o navegador usa (o proxy do Vite/nginx preserva o Host). Só origens da
+    lista permitida: o redirect_uri também precisa estar cadastrado no Google."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    origin = f"{proto}://{host}"
+    if origin not in {o.rstrip("/") for o in settings.cors_origins}:
+        raise HTTPException(400, "origem não permitida para login social")
+    return origin
+
+
+def _safe_next(path: str | None) -> str:
+    """Só caminhos relativos da própria aplicação (evita open redirect)."""
+    if not path or not path.startswith("/") or path.startswith("//") or "\\" in path:
+        return "/"
+    return path[:200]
+
+
+@router.get("/auth/providers", response_model=Providers, tags=["auth"])
+def providers(google: GoogleDep) -> Providers:
+    return Providers(google=google is not None)
+
+
+@router.get("/auth/google/login", status_code=302, tags=["auth"])
+def google_login(
+    request: Request,
+    engine: EngineDep,
+    settings: SettingsDep,
+    google: GoogleDep,
+    next: str | None = None,
+) -> RedirectResponse:
+    if google is None:
+        raise HTTPException(404, "login com Google não configurado")
+    origin = _public_origin(request, settings)
+    redirect_uri = f"{origin}{settings.public_api_prefix}/auth/google/callback"
+    state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    verifier, challenge = new_pkce()
+    with engine.begin() as conn:
+        repo.save_oauth_state(
+            conn, "google", state, nonce, verifier, redirect_uri, _safe_next(next)
+        )
+    response = RedirectResponse(
+        google.authorization_url(redirect_uri, state, nonce, challenge), status_code=302
+    )
+    response.set_cookie(
+        OAUTH_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@router.get("/auth/google/callback", status_code=302, tags=["auth"])
+def google_callback(
+    request: Request,
+    engine: EngineDep,
+    settings: SettingsDep,
+    google: GoogleDep,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    if google is None:
+        raise HTTPException(404, "login com Google não configurado")
+    origin = _public_origin(request, settings)
+
+    def fail(reason: str) -> RedirectResponse:
+        logger.warning("google_login_failed", extra={"reason": reason})
+        resp = RedirectResponse(f"{origin}/login?error=google", status_code=302)
+        resp.delete_cookie(OAUTH_COOKIE, path="/")
+        return resp
+
+    cookie_state = request.cookies.get(OAUTH_COOKIE) or ""
+    if error:
+        return fail(f"google: {error[:40]}")
+    if not code or not state or not secrets.compare_digest(state, cookie_state):
+        return fail("state ausente ou diferente do cookie")
+    with engine.begin() as conn:
+        saved = repo.pop_oauth_state(conn, "google", state)
+    if saved is None:
+        return fail("state expirado ou já usado")
+    try:
+        id_token = google.exchange_code(code, saved.redirect_uri, saved.code_verifier)
+        claims = google.verify_id_token(id_token, saved.nonce)
+    except GoogleAuthError as exc:
+        return fail(str(exc))
+    except httpx.HTTPError as exc:
+        return fail(f"rede: {type(exc).__name__}")
+    with engine.begin() as conn:
+        user, outcome = repo.user_for_identity(
+            conn, "google", claims.subject, claims.email, claims.name
+        )
+        token = repo.create_session(conn, user["id"], settings.session_ttl_days)
+    logger.info("google_login", extra={"user_id": user["id"], "outcome": outcome})
+    dest = saved.next_path if user["onboarded"] else "/onboarding"
+    response = RedirectResponse(f"{origin}{dest}", status_code=302)
+    _set_cookie(response, settings, token)
+    response.delete_cookie(OAUTH_COOKIE, path="/")
+    return response
 
 
 # --- preferências e favoritos -----------------------------------------------------------

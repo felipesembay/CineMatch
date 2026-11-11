@@ -7,6 +7,7 @@ import {
   itemDetailSchema,
   itemSummarySchema,
   pageSchema,
+  providersSchema,
   preferencesSchema,
   ratingsSchema,
   recommendationListSchema,
@@ -92,6 +93,10 @@ export const api = {
     request('POST', '/auth/login', userSchema, { email, password }),
   logout: () => request('POST', '/auth/logout', okSchema),
   me: () => request('GET', '/auth/me', userSchema),
+  providers: () => request('GET', '/auth/providers', providersSchema),
+  /** Navegação completa (não fetch): o backend redireciona para o Google e volta. */
+  googleLoginUrl: (next = '/my-list') =>
+    `${API_BASE_URL}/auth/google/login?${new URLSearchParams({ next })}`,
   deleteAccount: () => request('DELETE', '/users/me', okSchema),
 
   // personalização
