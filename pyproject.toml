@@ -76,6 +76,8 @@ ignore = []
 "tests/**" = ["S101", "S105", "S106", "S107"]
 # SQL montado só com fragmentos constantes do módulo; valores sempre por bind (revisado).
 "src/cinematch/serving/catalog.py" = ["S608"]
+# Notebooks de experimento: imports após o chdir para a raiz, tabelas largas, letras gregas.
+"*.ipynb" = ["E402", "E501", "RUF001", "B905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
