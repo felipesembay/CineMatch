@@ -11,7 +11,7 @@
 | **Catálogo** | 12.497 títulos (9.997 filmes, 2.500 séries), 94 mil pessoas, 19,5 mil keywords |
 | **Modelos comparados** | TF-IDF, Sentence Transformers, RRF, Rocchio, LogisticRegression, SGD, LightGBM (LambdaRank) |
 | **Em produção** | similares por TF-IDF (vizinhos pré-computados) + recomendação personalizada por Rocchio |
-| **Latência** | `/movies/{id}/similar`: p95 18,8 ms (local, 1 cliente) |
+| **Latência** | `/movies/{id}/similar`: p95 18,8 ms com Postgres local; 222 ms com o banco no Azure (RTT ~40 ms) |
 | **Qualidade** | 159 testes (unitários + integração com Postgres), lint e build no CI |
 
 ---
@@ -167,6 +167,17 @@ Latência medida em 2026-11-11 no container da API (1 cliente sequencial, 300 re
 | `GET /movies?q=…` (busca) | 16,9 ms | 22,2 ms | 25,6 ms |
 | `GET /movies?sort=popular` | 20,1 ms | 23,9 ms | 48,7 ms |
 
+Com o banco no Azure Database for PostgreSQL (mesmo teste, API local, RTT ~40 ms até o servidor; [api_latency_2026-11-11_azure.json](docs/experiments/api_latency_2026-11-11_azure.json)):
+
+| Endpoint | p50 | p95 | p99 |
+|---|---|---|---|
+| `GET /movies/{id}/similar` | 204,6 ms | 221,8 ms | 237,6 ms |
+| `GET /movies/{id}` | 119,1 ms | 133,6 ms | 195,8 ms |
+| `GET /movies?q=…` (busca) | 88,8 ms | 146,2 ms | 189,9 ms |
+| `GET /movies?sort=popular` | 88,7 ms | 147,6 ms | 196,4 ms |
+
+O tempo é dominado por idas e voltas na rede, não pelas queries. A primeira medição no Azure deu p95 de 524 ms em `/similar`. Cada request pagava 3 idas e voltas fixas (`pre_ping`, `BEGIN`, `ROLLBACK`). Leituras em `AUTOCOMMIT` e `pool_recycle` no lugar do `pre_ping` cortaram esse custo. `/similar` ainda faz 5 queries e fica um pouco acima da meta. O ganho grande viria de rodar a API na mesma região do banco (RTT < 2 ms).
+
 A meta da especificação é p95 < 200 ms. A concorrência ainda não foi testada.
 
 ## MLOps
@@ -209,9 +220,11 @@ docker compose up -d --build api web
 
 | Serviço | URL |
 |---|---|
-| App | http://127.0.0.1:8088 |
-| API (Swagger) | http://127.0.0.1:8010/docs |
-| MLflow | http://127.0.0.1:5010 |
+| App | http://localhost:8088 |
+| API (Swagger) | http://localhost:8010/docs |
+| MLflow | http://localhost:5010 |
+
+Use `localhost` (não `127.0.0.1`) para o login com Google: o endereço de retorno precisa bater com o cadastrado no Google Cloud.
 
 Todos os comandos (refresh, reprocessamento, Gold, benchmark, latência, testes de integração) estão em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
@@ -243,7 +256,7 @@ docs/                 plano, ADRs, fontes de dados, experimentos, operação
 
 - **Métricas offline são proxies.** A escolha entre TF-IDF e reranker deve sair de um teste A/B com CTR e favoritos, já instrumentado via eventos com `model_version`.
 - **Filtragem colaborativa** (ALS/BPR) e ranking aprendido com interações reais só quando houver volume suficiente de usuários.
-- **Nuvem:** migração completa do banco para Azure Database for PostgreSQL já automatizada e ensaiada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Próximos: containers na nuvem, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
+- **Nuvem:** banco migrado para o Azure Database for PostgreSQL em 2026-11-11, por cópia completa e verificada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Próximos: API na mesma região do banco, containers na nuvem, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
 - **Conta:** cadastro por senha sem verificação de e-mail nem recuperação de senha (o login com Google cobre esse caso); o limitador de login é em memória (uma réplica).
 - **Termos do TMDB:** restringem o uso dos dados em ML. Este é um projeto de estudo, não comercial, com o risco registrado no [ADR-008](docs/DECISIONS.md).
 

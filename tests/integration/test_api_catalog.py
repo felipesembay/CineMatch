@@ -14,7 +14,12 @@ from cinematch.config import Settings
 from cinematch.db import get_engine
 from cinematch.ingestion import repository as repo
 from cinematch.ingestion.tmdb.normalize import normalize
-from cinematch.serving.neighbors import activate_set, list_sets, write_neighbor_set
+from cinematch.serving.neighbors import (
+    activate_set,
+    delete_set,
+    list_sets,
+    write_neighbor_set,
+)
 
 TODAY = date.today()
 
@@ -271,6 +276,13 @@ def test_neighbor_sets_idempotent_and_activation_swap(
     assert [s["model_version"] for s in list_sets(engine) if s["is_active"]] == ["v-b"]
     with pytest.raises(LookupError):
         activate_set(engine, "nope")
+    with pytest.raises(ValueError, match="ativo"):
+        delete_set(engine, "v-b")
+    assert delete_set(engine, "v-a") == 1
+    assert [s["model_version"] for s in list_sets(engine)] == ["v-b"]
+    assert client.get(url).json()["model_version"] == "v-b"
+    with pytest.raises(LookupError):
+        delete_set(engine, "v-a")
 
 
 def test_genres_and_cors(client: TestClient, ids: dict[str, int]) -> None:

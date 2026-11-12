@@ -1,0 +1,46 @@
+{
+  "base_url": "http://127.0.0.1:8010",
+  "requests_per_endpoint": 300,
+  "concurrency": 1,
+  "host": {
+    "python": "3.12.3",
+    "machine": "x86_64"
+  },
+  "endpoints": {
+    "similar": {
+      "p50_ms": 204.57,
+      "p95_ms": 221.84,
+      "p99_ms": 237.56,
+      "mean_ms": 206.12,
+      "errors": 0
+    },
+    "detail": {
+      "p50_ms": 119.14,
+      "p95_ms": 133.55,
+      "p99_ms": 195.75,
+      "mean_ms": 140.21,
+      "errors": 0
+    },
+    "list_popular": {
+      "p50_ms": 88.74,
+      "p95_ms": 147.61,
+      "p99_ms": 196.37,
+      "mean_ms": 95.56,
+      "errors": 0
+    },
+    "list_top_rated": {
+      "p50_ms": 80.45,
+      "p95_ms": 136.54,
+      "p99_ms": 176.74,
+      "mean_ms": 88.06,
+      "errors": 0
+    },
+    "search": {
+      "p50_ms": 88.79,
+      "p95_ms": 146.23,
+      "p99_ms": 189.94,
+      "mean_ms": 96.26,
+      "errors": 0
+    }
+  }
+}

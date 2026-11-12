@@ -10,7 +10,7 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Connection, Engine, select, text, update
+from sqlalchemy import Connection, Engine, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cinematch.data.schema import item_neighbors, neighbor_sets
@@ -122,6 +122,28 @@ def activate_set(engine: Engine, model_version: str) -> None:
             .values(is_active=True)
         )
     logger.info("neighbor_set_activated", extra={"model_version": model_version})
+
+
+def delete_set(engine: Engine, model_version: str) -> int:
+    """Apaga um conjunto inativo (as linhas de item_neighbors caem por ON DELETE CASCADE).
+
+    Recusa o conjunto ativo: para trocar o servido, use `activate_set` antes.
+    Retorna quantos vizinhos foram removidos.
+    """
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(neighbor_sets.c.is_active).where(neighbor_sets.c.model_version == model_version)
+        ).first()
+        if row is None:
+            raise LookupError(f"conjunto de vizinhos inexistente: {model_version}")
+        if row.is_active:
+            raise ValueError(f"conjunto ativo não pode ser apagado: {model_version}")
+        rows = conn.execute(
+            delete(item_neighbors).where(item_neighbors.c.model_version == model_version)
+        ).rowcount
+        conn.execute(delete(neighbor_sets).where(neighbor_sets.c.model_version == model_version))
+    logger.info("neighbor_set_deleted", extra={"model_version": model_version, "rows": rows})
+    return rows
 
 
 def active_version(conn: Connection, slot: str = SLOT_SIMILAR) -> str | None:

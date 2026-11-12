@@ -27,6 +27,10 @@ class Settings(BaseSettings):
         description="URL SQLAlchemy do PostgreSQL.",
     )
     db_connect_timeout_s: int = Field(default=3, ge=1, le=30)
+    # Banco remoto (Azure): cada ida e volta custa ~40 ms. Em vez de `pre_ping` (um SELECT 1 por
+    # request), recicla conexões antes do idle timeout de 4 min do load balancer e liga keepalive.
+    db_pool_pre_ping: bool = False
+    db_pool_recycle_s: int = Field(default=240, ge=30)
 
     bronze_dir: Path = Field(
         default=Path("data/bronze"), description="Raiz da camada Bronze (backend local)."

@@ -223,6 +223,15 @@ Formato curto: contexto → decisão → consequências. Status: **Aceita**, **P
 - API e CLI apontam para o Azure por variável (`CINEMATCH_API_DATABASE_URL` / `CINEMATCH_DATABASE_URL`, `sslmode=require`); o banco local fica como rollback.
 **Alternativas:** Azure Database Migration Service (mais pesado para 0,9 GB); recalcular no destino (desperdiça o que já está versionado e validado).
 **Riscos:** latência maior por requisição (rede até o Azure) — remedir `evaluate api-latency` após a troca; custo de armazenamento (os 2 conjuntos de vizinhos antigos de 8 mil itens ocupam ~250 MB e podem ser removidos).
+**Resultado (2026-11-11):**
+- Conjuntos antigos apagados antes da cópia; migração em 2 min 19 s, verificada.
+- **Primeira medição no Azure:** p95 de `/similar` em 524 ms.
+- **Ajuste da pool para RTT de ~40 ms:**
+  - `AUTOCOMMIT` nas leituras;
+  - `pool_recycle=240` no lugar de `pre_ping`;
+  - keepalive e `tcp_user_timeout`.
+- **Depois do ajuste:** p95 de 222 ms em `/similar` e 134 ms em `/movies/{id}`.
+- Próximo passo de verdade: API na mesma região do banco.
 
 ## ADR-022 — Login com Google (OAuth 2.0 + OpenID Connect)
 **Status:** Aceita (2026-11-11)

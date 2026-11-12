@@ -333,6 +333,22 @@ def cmd_recs_activate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_recs_delete(args: argparse.Namespace) -> int:
+    from cinematch.db import get_engine
+    from cinematch.serving.neighbors import delete_set
+
+    engine = get_engine()
+    deleted = {}
+    for version in args.model_version:
+        try:
+            deleted[version] = delete_set(engine, version)
+        except (LookupError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    print(json.dumps({"deleted": deleted}, indent=2))
+    return 0
+
+
 def cmd_recs_list(args: argparse.Namespace) -> int:
     from cinematch.db import get_engine
     from cinematch.serving.neighbors import list_sets
@@ -555,6 +571,9 @@ def build_parser() -> argparse.ArgumentParser:
     ra = recs.add_parser("activate", help="troca o conjunto servido (rollback incluso)")
     ra.add_argument("model_version")
     ra.set_defaults(func=cmd_recs_activate)
+    rd = recs.add_parser("delete", help="apaga conjuntos inativos (libera espaço)")
+    rd.add_argument("model_version", nargs="+")
+    rd.set_defaults(func=cmd_recs_delete)
     rl = recs.add_parser("list", help="conjuntos gravados")
     rl.set_defaults(func=cmd_recs_list)
 

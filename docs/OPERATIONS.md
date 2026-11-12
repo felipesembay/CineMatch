@@ -90,6 +90,7 @@ uv run --extra ml cinematch recs build-similar --method tfidf --activate --mlflo
 uv run --extra ml cinematch recs build-similar --method rerank-logreg --mlflow      # challenger (inativo)
 uv run cinematch recs list                                   # conjuntos gravados e qual está ativo
 uv run cinematch recs activate '<model_version>'             # troca/rollback do conjunto servido
+uv run cinematch recs delete '<model_version>' [...]         # apaga conjuntos inativos (recusa o ativo)
 docker compose up -d --build api                             # http://127.0.0.1:8010/docs
 uv run cinematch evaluate api-latency --out docs/experiments/<arquivo>.json
 ```
@@ -146,18 +147,22 @@ Requerem um banco cujo nome termine em `_test` (o schema é recriado a cada sess
 ```bash
 docker compose exec postgres sh -c 'createdb -U "$POSTGRES_USER" cinematch_test'   # uma vez
 set -a; . ./.env; set +a
-CINEMATCH_TEST_DATABASE_URL="${CINEMATCH_DATABASE_URL%/*}/cinematch_test" uv run pytest
+# com o banco no Azure, CINEMATCH_DATABASE_URL aponta para lá; os testes usam sempre o local
+CINEMATCH_TEST_DATABASE_URL="${CINEMATCH_LOCAL_DATABASE_URL:-$CINEMATCH_DATABASE_URL}"
+CINEMATCH_TEST_DATABASE_URL="${CINEMATCH_TEST_DATABASE_URL%/*}/cinematch_test" uv run pytest
 ```
 
 ## Banco no Azure (migração completa)
 
 Copia o banco local inteiro (catálogo, features, vizinhos, usuários, histórico) para o Azure Database for PostgreSQL Flexible Server. Nada é recalculado. Ensaio local em 2026-11-11: 896 MB em ~20 s, contagens idênticas em todas as tabelas, com usuário sem privilégio de superusuário (como o admin do Azure).
 
+**Execução real (2026-11-11):** antes, os 2 conjuntos de vizinhos inativos do catálogo de 8 mil itens foram apagados (`recs delete`, 800 mil linhas). Dump de 99 MB; `run` em 2 min 19 s; todas as contagens iguais, Alembic 0008 nos dois lados, mesmo conjunto ativo. pgvector 0.8.2 no Azure e 0.8.7 no local: o formato do tipo `vector` é o mesmo.
+
 1. **No portal do Azure (servidor):**
    - *Server parameters* → `azure.extensions` → marque **VECTOR** → *Save*.
    - *Networking* → adicione o IP desta máquina às regras de firewall.
    - *Databases* → crie o banco `cinematch` (vazio).
-2. **No `.env`:** `CINEMATCH_MIGRATION_TARGET_URL=postgresql://USUARIO:SENHA@SERVIDOR.postgres.database.azure.com:5432/cinematch?sslmode=require`. Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`).
+2. **No `.env`:** use nomes próprios para o Azure (ex.: `AZURE_PG_*`), nunca `POSTGRES_*`: esses já configuram o container local e a última definição sobrescreve a primeira. Porta do Azure: **5432**. Defina `CINEMATCH_MIGRATION_TARGET_URL=postgresql://USUARIO:SENHA@SERVIDOR.postgres.database.azure.com:5432/cinematch?sslmode=require`. Caracteres especiais da senha precisam de URL-encoding (`@` → `%40`).
 3. **Migrar:**
    ```bash
    docker compose stop api           # sem escritas durante a cópia
@@ -169,9 +174,17 @@ Copia o banco local inteiro (catálogo, features, vizinhos, usuários, históric
    CINEMATCH_DATABASE_URL=postgresql+psycopg://USUARIO:SENHA@SERVIDOR.postgres.database.azure.com:5432/cinematch?sslmode=require
    CINEMATCH_API_DATABASE_URL=${CINEMATCH_DATABASE_URL}   # usado pelo container da API
    CINEMATCH_DB_CONNECT_TIMEOUT_S=10
+   CINEMATCH_LOCAL_DATABASE_URL=postgresql+psycopg://...@localhost:5434/cinematch   # rollback e testes
    ```
    Depois: `docker compose up -d api` e `curl -s localhost:8010/health/ready`.
-5. **Rollback:** remova `CINEMATCH_API_DATABASE_URL` (e volte `CINEMATCH_DATABASE_URL` para `localhost:5434`). O banco local continua intacto.
+5. **Rollback:** remova `CINEMATCH_API_DATABASE_URL` e volte `CINEMATCH_DATABASE_URL` para o valor de `CINEMATCH_LOCAL_DATABASE_URL`. O banco local continua intacto. Escritas feitas no Azure depois da troca não existem no banco local.
+
+**Pool para banco remoto:** cada ida e volta custa ~40 ms. Por isso:
+- leituras do catálogo usam `AUTOCOMMIT`, sem `BEGIN`/`ROLLBACK`;
+- não há `pool_pre_ping` (`CINEMATCH_DB_POOL_PRE_PING=false`);
+- conexões são recicladas a cada 240 s (`CINEMATCH_DB_POOL_RECYCLE_S`), abaixo do idle de 4 min do load balancer do Azure;
+- TCP keepalive ligado;
+- `tcp_user_timeout=10s`: na medição, a rede até o Azure travou de 2 s a 60 s algumas vezes, inclusive em `SELECT 1` direto do host, então um travamento vira erro e reconexão em vez de prender o worker.
 
 `scripts/migrate_db.sh verify` compara de novo as contagens a qualquer momento. O dump fica em `data/migration/` (fora do Git). Testes de integração continuam usando o banco local `cinematch_test`; MLflow continua local.
 
@@ -181,5 +194,7 @@ Copia o banco local inteiro (catálogo, features, vizinhos, usuários, históric
 2. *Credenciais* → *Criar ID do cliente OAuth* → **Aplicativo da Web**. URIs de redirecionamento autorizados:
    - `http://localhost:5173/api/auth/google/callback` (Vite em dev)
    - `http://localhost:8088/api/auth/google/callback` (nginx no Compose)
-3. No `.env`: `CINEMATCH_GOOGLE_CLIENT_ID` e `CINEMATCH_GOOGLE_CLIENT_SECRET`. Reinicie a API. O botão "Continuar com Google" aparece no login quando `GET /auth/providers` devolve `google: true`.
+
+   Atenção: são **URIs de redirecionamento autorizados**, com o caminho `/api/auth/google/callback`. *Origens JavaScript autorizadas* (só `http://localhost:5173`) não bastam: o Google recusa com `redirect_uri_mismatch`. Se quiser usar `127.0.0.1`, cadastre também `http://127.0.0.1:5173/api/auth/google/callback` e `http://127.0.0.1:8088/api/auth/google/callback`.
+3. No `.env`: `CINEMATCH_GOOGLE_CLIENT_ID` e `CINEMATCH_GOOGLE_CLIENT_SECRET`. O JSON baixado do console (`client_secret_*.json`) é ignorado pelo Git; depois de copiar os valores, apague-o. Reinicie a API. O botão "Continuar com Google" aparece no login quando `GET /auth/providers` devolve `google: true`.
 4. Acesse o app por `localhost` (não `127.0.0.1`): o `redirect_uri` é montado a partir da origem do navegador e precisa estar cadastrado.

@@ -4,6 +4,7 @@ Sequencial (1 cliente, sem concorrência), após aquecimento. Itens sorteados co
 Mede o tempo de ida e volta no cliente, incluindo HTTP local, não só o handler.
 """
 
+import contextlib
 import platform
 import random
 import statistics
@@ -49,14 +50,17 @@ def run_latency(
     with httpx.Client(base_url=base_url, timeout=10) as client:
         for kind in endpoints:
             for _ in range(warmup):
-                client.get(_paths(kind, rng.choice(item_ids), rng))
+                with contextlib.suppress(httpx.TimeoutException):
+                    client.get(_paths(kind, rng.choice(item_ids), rng))
             times, errors = [], 0
             for _ in range(requests):
                 path = _paths(kind, rng.choice(item_ids), rng)
                 t0 = time.perf_counter()
-                resp = client.get(path)
+                try:
+                    errors += client.get(path).status_code >= 400
+                except httpx.TimeoutException:
+                    errors += 1  # conta o tempo até o timeout: não esconde a cauda
                 times.append((time.perf_counter() - t0) * 1000)
-                errors += resp.status_code >= 400
             out["endpoints"][kind] = {
                 "p50_ms": round(_pct(times, 0.50), 2),
                 "p95_ms": round(_pct(times, 0.95), 2),

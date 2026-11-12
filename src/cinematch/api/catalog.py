@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 
 from cinematch.config import Settings, get_settings
-from cinematch.db import get_engine
+from cinematch.db import autocommit, get_engine
 from cinematch.logconfig import request_id_ctx
 from cinematch.serving import catalog as cat
 from cinematch.serving.neighbors import active_version, read_neighbors
@@ -97,7 +97,11 @@ def _summary(row: dict[str, Any], settings: Settings) -> dict[str, Any]:
     }
 
 
-EngineDep = Annotated[Engine, Depends(get_engine)]
+def get_read_engine(engine: Annotated[Engine, Depends(get_engine)]) -> Engine:
+    return autocommit(engine)
+
+
+EngineDep = Annotated[Engine, Depends(get_read_engine)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 

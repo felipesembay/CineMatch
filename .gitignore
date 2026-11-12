@@ -37,3 +37,9 @@ frontend/**/dist/
 
 # Pacotes baixados (ex.: export do gerador de frontend)
 *.zip
+
+#Client secret Google
+*.json
+
+# credencial OAuth baixada do Google Cloud
+client_secret_*.json
