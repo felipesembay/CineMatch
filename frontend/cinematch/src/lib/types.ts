@@ -1,26 +1,93 @@
-import {z} from 'zod';
-export const itemTypeSchema=z.enum(['movie','tv']);
-export const itemSummarySchema=z.object({id:z.number(),type:itemTypeSchema,title:z.string(),year:z.number().nullable(),poster_url:z.string().nullable(),backdrop_url:z.string().nullable(),genres:z.array(z.string()),vote_average:z.number().nullable(),vote_count:z.number()});
-export const itemDetailSchema=itemSummarySchema.extend({overview:z.string().nullable(),runtime_minutes:z.number().nullable(),release_date:z.string().nullable(),status:z.string().nullable(),original_language:z.string().nullable(),directors:z.array(z.string()),cast:z.array(z.string()),keywords:z.array(z.string()),external:z.object({tmdb_url:z.string().nullable(),imdb_url:z.string().nullable(),tvmaze_url:z.string().nullable()})});
-export const pageSchema=<T extends z.ZodTypeAny>(item:T)=>z.object({items:z.array(item),page:z.number(),page_size:z.number(),total:z.number()});
-export const recommendationSchema=itemSummarySchema.extend({score:z.number(),reason:z.string().nullable()});
-export const recommendationListSchema=z.object({request_id:z.string(),model_version:z.string(),fallback:z.boolean(),items:z.array(recommendationSchema)});
-export const genreSchema=z.array(z.object({id:z.number(),name:z.string()}));
-export const preferencesSchema=z.object({liked:z.array(z.number()),disliked:z.array(z.number()),genres:z.array(z.string())});
-export const favoritesSchema=z.array(itemSummarySchema);
-export const userSchema=z.object({id:z.number(),email:z.string(),name:z.string(),onboarded:z.boolean()});
-export const ratingSchema=z.object({item:itemSummarySchema,value:z.number().int().min(1).max(5),comment:z.string().nullable(),updated_at:z.string()});
-export const ratingsSchema=z.array(ratingSchema);
-export const providersSchema=z.object({password:z.boolean(),google:z.boolean()});
-export const eventAckSchema=z.object({ok:z.boolean(),accepted:z.number(),duplicates:z.number()});
-export type ItemSummary=z.infer<typeof itemSummarySchema>;
-export type ItemDetail=z.infer<typeof itemDetailSchema>;
-export type Recommendation=z.infer<typeof recommendationSchema>;
-export type RecommendationList=z.infer<typeof recommendationListSchema>;
-export type Preferences=z.infer<typeof preferencesSchema>;
-export type User=z.infer<typeof userSchema>;
-export type Rating=z.infer<typeof ratingSchema>;
-export type Page<T>={items:T[];page:number;page_size:number;total:number};
-export type EventSurface='home_row'|'similar'|'feed'|'search'|'detail'|'my_list';
-export type EventType='impression'|'click'|'favorite_add'|'favorite_remove'|'rating'|'search';
-export type TrackingEvent={event_id:string;type:EventType;item_id?:number;query?:string;surface:EventSurface;position?:number;request_id?:string;model_version?:string;occurred_at:string};
+import { z } from 'zod';
+export const itemTypeSchema = z.enum(['movie', 'tv']);
+export const itemSummarySchema = z.object({
+  id: z.number(),
+  type: itemTypeSchema,
+  title: z.string(),
+  year: z.number().nullable(),
+  poster_url: z.string().nullable(),
+  backdrop_url: z.string().nullable(),
+  genres: z.array(z.string()),
+  vote_average: z.number().nullable(),
+  vote_count: z.number(),
+});
+export const itemDetailSchema = itemSummarySchema.extend({
+  overview: z.string().nullable(),
+  runtime_minutes: z.number().nullable(),
+  release_date: z.string().nullable(),
+  status: z.string().nullable(),
+  original_language: z.string().nullable(),
+  directors: z.array(z.string()),
+  cast: z.array(z.string()),
+  keywords: z.array(z.string()),
+  external: z.object({
+    tmdb_url: z.string().nullable(),
+    imdb_url: z.string().nullable(),
+    tvmaze_url: z.string().nullable(),
+  }),
+});
+export const pageSchema = <T extends z.ZodTypeAny>(item: T) =>
+  z.object({ items: z.array(item), page: z.number(), page_size: z.number(), total: z.number() });
+export const recommendationSchema = itemSummarySchema.extend({
+  score: z.number(),
+  reason: z.string().nullable(),
+});
+export const recommendationListSchema = z.object({
+  request_id: z.string(),
+  model_version: z.string(),
+  fallback: z.boolean(),
+  items: z.array(recommendationSchema),
+});
+export const genreSchema = z.array(z.object({ id: z.number(), name: z.string() }));
+export const preferencesSchema = z.object({
+  liked: z.array(z.number()),
+  disliked: z.array(z.number()),
+  genres: z.array(z.string()),
+});
+export const favoritesSchema = z.array(itemSummarySchema);
+export const userSchema = z.object({
+  id: z.number(),
+  email: z.string(),
+  name: z.string(),
+  onboarded: z.boolean(),
+});
+export const ratingSchema = z.object({
+  item: itemSummarySchema,
+  value: z.number().int().min(1).max(5),
+  comment: z.string().nullable(),
+  updated_at: z.string(),
+});
+export const ratingsSchema = z.array(ratingSchema);
+export const providersSchema = z.object({ password: z.boolean(), google: z.boolean() });
+export const eventAckSchema = z.object({
+  ok: z.boolean(),
+  accepted: z.number(),
+  duplicates: z.number(),
+});
+export type ItemSummary = z.infer<typeof itemSummarySchema>;
+export type ItemDetail = z.infer<typeof itemDetailSchema>;
+export type Recommendation = z.infer<typeof recommendationSchema>;
+export type RecommendationList = z.infer<typeof recommendationListSchema>;
+export type Preferences = z.infer<typeof preferencesSchema>;
+export type User = z.infer<typeof userSchema>;
+export type Rating = z.infer<typeof ratingSchema>;
+export type Page<T> = { items: T[]; page: number; page_size: number; total: number };
+export type EventSurface = 'home_row' | 'similar' | 'feed' | 'search' | 'detail' | 'my_list';
+export type EventType =
+  | 'impression'
+  | 'click'
+  | 'favorite_add'
+  | 'favorite_remove'
+  | 'rating'
+  | 'search';
+export type TrackingEvent = {
+  event_id: string;
+  type: EventType;
+  item_id?: number;
+  query?: string;
+  surface: EventSurface;
+  position?: number;
+  request_id?: string;
+  model_version?: string;
+  occurred_at: string;
+};

@@ -55,4 +55,8 @@ export const auth = {
 
 export const useAuth = () => useSyncExternalStore(auth.subscribe, auth.getUser, auth.getUser);
 export const useAuthReady = () =>
-  useSyncExternalStore(auth.subscribe, () => state.ready, () => state.ready);
+  useSyncExternalStore(
+    auth.subscribe,
+    () => state.ready,
+    () => state.ready,
+  );

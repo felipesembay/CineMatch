@@ -42,8 +42,12 @@ const STATUS: Record<string, string> = {
 };
 
 export const genreLabel = (name: string): string => GENRES[name] ?? name;
-export const statusLabel = (status: string | null): string => (status ? STATUS[status] ?? status : '');
+export const statusLabel = (status: string | null): string =>
+  status ? (STATUS[status] ?? status) : '';
 
 // O backend gera `reason` em pt-BR com nomes de gênero do TMDB ("Também Action e Crime").
 export const reasonLabel = (reason: string | null | undefined): string | null | undefined =>
-  reason?.replace(/\b(Também|em|e) ([A-Z][\w&\- ]*?)(?= e |$)/g, (_, p, g) => `${p} ${genreLabel(g)}`);
+  reason?.replace(
+    /\b(Também|em|e) ([A-Z][\w&\- ]*?)(?= e |$)/g,
+    (_, p, g) => `${p} ${genreLabel(g)}`,
+  );

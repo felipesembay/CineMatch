@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Heart, MessageSquareText, Sparkles, Star, ThumbsUp, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Heart,
+  MessageSquareText,
+  Sparkles,
+  Star,
+  ThumbsUp,
+  Trash2,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { auth, useAuth, useAuthReady } from '../lib/auth';
 import { reasonLabel } from '../lib/labels';
@@ -36,14 +44,24 @@ export function MyList() {
 
   const likedItems = liked.flatMap(q => (q.data ? [q.data as ItemSummary] : []));
   const tabs: { id: Tab; label: string; count?: number; icon: React.ReactNode }[] = [
-    { id: 'favorites', label: 'Favoritos', count: favorites.data?.length, icon: <Heart size={15} /> },
+    {
+      id: 'favorites',
+      label: 'Favoritos',
+      count: favorites.data?.length,
+      icon: <Heart size={15} />,
+    },
     {
       id: 'ratings',
       label: 'Avaliados e comentados',
       count: ratings.data?.length,
       icon: <MessageSquareText size={15} />,
     },
-    { id: 'liked', label: 'Curtidos', count: prefs.data?.liked.length, icon: <ThumbsUp size={15} /> },
+    {
+      id: 'liked',
+      label: 'Curtidos',
+      count: prefs.data?.liked.length,
+      icon: <ThumbsUp size={15} />,
+    },
   ];
 
   return (
@@ -68,7 +86,9 @@ export function MyList() {
         surface="my_list"
         requestId={recs.data?.request_id}
         modelVersion={recs.data?.model_version}
-        reasons={Object.fromEntries((recs.data?.items ?? []).map(i => [i.id, reasonLabel(i.reason) ?? null]))}
+        reasons={Object.fromEntries(
+          (recs.data?.items ?? []).map(i => [i.id, reasonLabel(i.reason) ?? null]),
+        )}
       />
 
       <div role="tablist" aria-label="Seções da lista" className="mb-8 mt-4 flex flex-wrap gap-2">
@@ -190,13 +210,20 @@ function RatingsList({
             onClick={() => nav(`/title/${r.item.id}`, { state: { backgroundLocation: location } })}
             aria-label={`Abrir ${r.item.title}`}
           >
-            <Poster id={r.item.id} title={r.item.title} url={r.item.poster_url} className="aspect-[2/3]" />
+            <Poster
+              id={r.item.id}
+              title={r.item.title}
+              url={r.item.poster_url}
+              className="aspect-[2/3]"
+            />
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
               <button
                 className="text-left font-semibold hover:text-amber"
-                onClick={() => nav(`/title/${r.item.id}`, { state: { backgroundLocation: location } })}
+                onClick={() =>
+                  nav(`/title/${r.item.id}`, { state: { backgroundLocation: location } })
+                }
               >
                 {r.item.title} <span className="text-xs font-normal text-muted">{r.item.year}</span>
               </button>
@@ -214,7 +241,9 @@ function RatingsList({
               ))}
             </div>
             {r.comment ? (
-              <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm text-ink/90">“{r.comment}”</p>
+              <p className="mt-2 line-clamp-4 whitespace-pre-line text-sm text-ink/90">
+                “{r.comment}”
+              </p>
             ) : (
               <p className="mt-2 text-xs text-muted">Sem comentário.</p>
             )}

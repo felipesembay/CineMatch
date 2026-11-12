@@ -89,7 +89,9 @@ export function RatingBox({ itemId }: { itemId: number }) {
             Remover
           </button>
         )}
-        {saved && !save.isPending && <span className="text-xs text-amber">Salvo na sua lista.</span>}
+        {saved && !save.isPending && (
+          <span className="text-xs text-amber">Salvo na sua lista.</span>
+        )}
         {(save.isError || remove.isError) && (
           <span className="text-xs text-red-300">Não foi possível salvar. Tente novamente.</span>
         )}
