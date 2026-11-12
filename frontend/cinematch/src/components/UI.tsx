@@ -1,5 +1,6 @@
 import { AlertCircle, Film, LoaderCircle } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
+import { useT } from '../lib/i18n';
 export const artColors = [
   ['#21384b', '#0b1828', '#cda873'],
   ['#60402e', '#1b192c', '#efbd71'],
@@ -23,12 +24,13 @@ export function Poster({
   url?: string | null;
   showTitle?: boolean;
 }) {
+  const { t } = useT();
   const c = artColors[id % artColors.length];
   const style = { '--art-a': c[0], '--art-b': c[1], '--art-glow': c[2] } as CSSProperties;
   return (
     <div
       role="img"
-      aria-label={`Arte de ${title}`}
+      aria-label={t('ui.art', { title })}
       className={`poster-art ${className}`}
       style={style}
     >
@@ -46,7 +48,7 @@ export function Poster({
       <div className="absolute inset-0 z-[2] bg-gradient-to-t from-black/60 via-transparent to-black/10" />
       {showTitle && (
         <div
-          className={`absolute z-0 ${wide ? 'bottom-8 left-8 text-3xl md:text-6xl' : 'bottom-5 left-4 right-3 text-lg md:text-xl'} font-display font-bold leading-tight drop-shadow-xl`}
+          className={`absolute z-0 text-white ${wide ? 'bottom-8 left-8 text-3xl md:text-6xl' : 'bottom-5 left-4 right-3 text-lg md:text-xl'} font-display font-bold leading-tight drop-shadow-xl`}
         >
           {title}
         </div>
@@ -74,19 +76,14 @@ export function SkeletonCards({ count = 6 }: { count?: number }) {
     </div>
   );
 }
-export function ErrorState({
-  onRetry,
-  message = 'Não foi possível carregar esta seção.',
-}: {
-  onRetry: () => void;
-  message?: string;
-}) {
+export function ErrorState({ onRetry, message }: { onRetry: () => void; message?: string }) {
+  const { t } = useT();
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-surface p-5 text-sm text-muted">
+    <div className="flex items-center gap-3 rounded-xl border border-fg/10 bg-surface p-5 text-sm text-muted">
       <AlertCircle size={19} />
-      <span>{message}</span>
+      <span>{message ?? t('ui.loadError')}</span>
       <button className="ml-auto text-amber hover:underline" onClick={onRetry}>
-        Tentar novamente
+        {t('ui.retry')}
       </button>
     </div>
   );

@@ -3,7 +3,7 @@
 import logging
 import re
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -13,7 +13,14 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Engine
 
-from cinematch.api.catalog import ItemSummary, Recommendation, RecommendationList, _summary
+from cinematch.api.catalog import (
+    ItemSummary,
+    LangDep,
+    Recommendation,
+    RecommendationList,
+    _summary,
+    recommendation,
+)
 from cinematch.config import Settings, get_settings
 from cinematch.db import get_engine
 from cinematch.logconfig import request_id_ctx
@@ -373,15 +380,19 @@ def put_prefs(body: Preferences, user: UserDep, engine: EngineDep) -> dict[str, 
         return repo.get_preferences(conn, user["id"])
 
 
-def _items(conn: Any, ids: list[int], settings: Settings) -> list[dict[str, Any]]:
-    rows = cat.summaries_by_ids(conn, ids)
+def _items(
+    conn: Any, ids: list[int], settings: Settings, lang: str = cat.ORIGINAL_LANG
+) -> list[dict[str, Any]]:
+    rows = cat.summaries_by_ids(conn, ids, lang)
     return [_summary(rows[i], settings) for i in ids if i in rows]
 
 
 @router.get("/users/me/favorites", response_model=list[ItemSummary], tags=["users"])
-def get_favorites(user: UserDep, engine: EngineDep, settings: SettingsDep) -> list[dict]:
+def get_favorites(
+    user: UserDep, engine: EngineDep, settings: SettingsDep, lang: LangDep = "pt-BR"
+) -> list[dict]:
     with engine.connect() as conn:
-        return _items(conn, repo.favorite_ids(conn, user["id"]), settings)
+        return _items(conn, repo.favorite_ids(conn, user["id"]), settings, lang)
 
 
 @router.put("/users/me/favorites", response_model=list[ItemSummary], tags=["users"])
@@ -428,10 +439,12 @@ def unrate(item_id: int, user: UserDep, engine: EngineDep) -> Ok:
 
 
 @router.get("/users/me/ratings", response_model=list[RatingOut], tags=["ratings"])
-def my_ratings(user: UserDep, engine: EngineDep, settings: SettingsDep) -> list[dict]:
+def my_ratings(
+    user: UserDep, engine: EngineDep, settings: SettingsDep, lang: LangDep = "pt-BR"
+) -> list[dict]:
     with engine.connect() as conn:
         ratings = repo.list_ratings(conn, user["id"])
-        rows = cat.summaries_by_ids(conn, [r["item_id"] for r in ratings])
+        rows = cat.summaries_by_ids(conn, [r["item_id"] for r in ratings], lang)
     return [
         {
             "item": _summary(rows[r["item_id"]], settings),
@@ -472,17 +485,10 @@ def recommendations_me(
     engine: EngineDep,
     settings: SettingsDep,
     k: Annotated[int, Query(ge=1, le=50)] = 20,
+    lang: LangDep = "pt-BR",
 ) -> RecommendationList:
     with engine.connect() as conn:
-        prefs = repo.get_preferences(conn, user["id"])
-        result = personalized(
-            conn,
-            user["id"],
-            active_version(conn),
-            repo.seen_item_ids(conn, user["id"]),
-            prefs["genres"],
-            k,
-        )
+        result = _personalized(conn, user["id"], k, lang)
     logger.info(
         "recommendations_served",
         extra={
@@ -497,7 +503,78 @@ def recommendations_me(
         model_version=result["model_version"],
         fallback=result["fallback"],
         items=[
-            Recommendation(**_summary(row, settings), score=score, reason=reason)
-            for row, score, reason in result["items"]
+            recommendation(row, settings, score, reason) for row, score, reason in result["items"]
         ],
+    )
+
+
+def _personalized(conn: Any, user_id: int, k: int, lang: str) -> dict[str, Any]:
+    prefs = repo.get_preferences(conn, user_id)
+    return personalized(
+        conn,
+        user_id,
+        active_version(conn),
+        repo.seen_item_ids(conn, user_id),
+        prefs["genres"],
+        k,
+        lang=lang,
+    )
+
+
+# --- destaque da home ---------------------------------------------------------------------
+
+FEATURED_CANDIDATES = 10
+
+
+class Featured(BaseModel):
+    kind: Literal["personal", "weekly"] = Field(
+        description="personal: 1º recomendado com imagem; weekly: rodízio da semana ISO"
+    )
+    period: str = Field(description="semana ISO do rodízio (ex.: 2026-W46)")
+    request_id: str
+    model_version: str
+    item: Recommendation
+    overview: str | None
+    overview_language: str | None
+
+
+@router.get("/featured", response_model=Featured, responses={404: {}}, tags=["recommendations"])
+def featured(
+    user: Annotated[dict | None, Depends(optional_user)],
+    engine: EngineDep,
+    settings: SettingsDep,
+    lang: LangDep = "pt-BR",
+) -> Featured:
+    """Destaque da home. Logado com perfil (sementes): o recomendado mais bem pontuado que tem
+    imagem de fundo. Visitante, ou logado sem perfil: o rodízio semanal, igual para todos."""
+    today = date.today()
+    pick: tuple[dict[str, Any], float, Any] | None = None
+    kind, version = "weekly", cat.FEATURED_VERSION
+    with engine.connect() as conn:
+        if user is not None:
+            result = _personalized(conn, user["id"], FEATURED_CANDIDATES, lang)
+            if not result["fallback"]:
+                pick = next((c for c in result["items"] if c[0]["backdrop_path"]), None)
+                if pick is not None:
+                    kind, version = "personal", result["model_version"]
+        if pick is None:
+            row = cat.weekly_featured(conn, today, lang)
+            if row is None:
+                raise HTTPException(404, "catálogo sem candidatos a destaque")
+            pick = (row, 1.0, ("weekly_pick", []))
+        overview, overview_lang = cat.display_overviews(conn, [pick[0]["id"]], lang).get(
+            pick[0]["id"], (None, None)
+        )
+    logger.info(
+        "featured_served",
+        extra={"item_id": pick[0]["id"], "kind": kind, "model_version": version},
+    )
+    return Featured(
+        kind=kind,
+        period=cat.featured_week(today),
+        request_id=request_id_ctx.get() or "",
+        model_version=version,
+        item=recommendation(pick[0], settings, pick[1], pick[2]),
+        overview=overview,
+        overview_language=overview_lang,
     )

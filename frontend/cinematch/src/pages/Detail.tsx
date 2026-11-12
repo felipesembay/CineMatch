@@ -8,13 +8,14 @@ import { track } from '../lib/events';
 import { Poster, ErrorState } from '../components/UI';
 import { TitleRow } from '../components/TitleRow';
 import { RatingBox } from '../components/RatingBox';
-import { genreLabel, reasonLabel, statusLabel } from '../lib/labels';
+import { useT } from '../lib/i18n';
 export function Detail({ modal = false }: { modal?: boolean }) {
   const { id } = useParams();
   const itemId = Number(id);
   const nav = useNavigate();
   const qc = useQueryClient();
   const user = useAuth();
+  const { t, lang, genre: genreLabel, status: statusLabel, reason, number } = useT();
   const detail = useQuery({
     queryKey: ['detail', itemId],
     queryFn: () => api.detail(itemId),
@@ -89,7 +90,7 @@ export function Detail({ modal = false }: { modal?: boolean }) {
             </div>
             <div className="relative mx-auto -mt-36 max-w-6xl px-5 md:px-10">
               <div className="flex flex-col gap-7 md:flex-row md:gap-10">
-                <div className="hidden w-52 shrink-0 overflow-hidden rounded-xl shadow-cinema md:block">
+                <div className="hidden w-52 shrink-0 self-start overflow-hidden rounded-xl shadow-cinema md:block">
                   <Poster
                     id={item.id}
                     title={item.title}
@@ -99,7 +100,8 @@ export function Detail({ modal = false }: { modal?: boolean }) {
                 </div>
                 <div className="min-w-0 flex-1 pt-12">
                   <div className="mb-3 text-xs font-bold uppercase tracking-widest text-amber">
-                    {item.type === 'movie' ? 'Filme' : 'Série'} • {statusLabel(item.status)}
+                    {item.type === 'movie' ? t('detail.movie') : t('detail.series')} •{' '}
+                    {statusLabel(item.status)}
                   </div>
                   <h1 className="font-display text-3xl font-bold md:text-5xl">{item.title}</h1>
                   <div className="mt-5 flex flex-wrap items-center gap-3 text-sm text-muted">
@@ -108,48 +110,51 @@ export function Detail({ modal = false }: { modal?: boolean }) {
                     <Clock size={15} />
                     <span>{item.runtime_minutes ? `${item.runtime_minutes} min` : '—'}</span>
                     <span>•</span>
-                    <Star size={16} fill="#F5A524" className="text-amber" />
+                    <Star size={16} fill="currentColor" className="text-amber" />
                     <span className="text-ink">{item.vote_average?.toFixed(1) || '—'}</span>
-                    <span>({item.vote_count.toLocaleString('pt-BR')} votos)</span>
+                    <span>{t('detail.votes', { count: number(item.vote_count) })}</span>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2">
                     {item.genres.map(g => (
                       <span
                         key={g}
-                        className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs"
+                        className="rounded-full border border-fg/15 bg-fg/5 px-3 py-1 text-xs"
                       >
                         {genreLabel(g)}
                       </span>
                     ))}
                   </div>
                   <p className="mt-6 max-w-2xl leading-7 text-muted">
-                    {item.overview || 'Sinopse indisponível.'}
+                    {item.overview || t('detail.noOverview')}
                   </p>
+                  {item.overview && lang !== 'en' && item.overview_language === 'en' && (
+                    <p className="mt-2 text-xs italic text-muted">{t('detail.overviewEn')}</p>
+                  )}
                   <div className="mt-6 flex flex-wrap gap-3">
                     {user ? (
                       <button className="btn btn-primary" onClick={() => fav.mutate()}>
                         <Heart size={17} fill={isFav ? 'currentColor' : 'none'} />
-                        {isFav ? 'Remover da lista' : 'Adicionar à minha lista'}
+                        {isFav ? t('detail.removeList') : t('detail.addList')}
                       </button>
                     ) : (
                       <button className="btn btn-primary" onClick={() => nav('/login')}>
                         <Heart size={17} />
-                        Entre para favoritar
+                        {t('detail.signInFav')}
                       </button>
                     )}
                   </div>
                   <div className="mt-8 grid gap-5 text-sm md:grid-cols-2">
                     <div>
-                      <p className="mb-1 text-muted">Direção / criação</p>
-                      <p>{item.directors.join(', ') || 'Não informado'}</p>
+                      <p className="mb-1 text-muted">{t('detail.directors')}</p>
+                      <p>{item.directors.join(', ') || t('detail.unknown')}</p>
                     </div>
                     <div>
-                      <p className="mb-1 text-muted">Elenco</p>
-                      <p>{item.cast.slice(0, 8).join(', ') || 'Não informado'}</p>
+                      <p className="mb-1 text-muted">{t('detail.cast')}</p>
+                      <p>{item.cast.slice(0, 8).join(', ') || t('detail.unknown')}</p>
                     </div>
                   </div>
                   <div className="mt-7">
-                    <p className="mb-3 text-sm text-muted">Temas</p>
+                    <p className="mb-3 text-sm text-muted">{t('detail.keywords')}</p>
                     <div className="flex flex-wrap gap-2">
                       {item.keywords.map(k => (
                         <span key={k} className="rounded bg-raised px-3 py-1.5 text-xs">
@@ -174,22 +179,20 @@ export function Detail({ modal = false }: { modal?: boolean }) {
                         </a>
                       ))}
                   </div>
-                  <div className="mt-9 border-t border-white/10 pt-6">
-                    <p className="mb-3 text-sm font-semibold">Sua avaliação</p>
+                  <div className="mt-9 border-t border-fg/10 pt-6">
+                    <p className="mb-3 text-sm font-semibold">{t('detail.yourRating')}</p>
                     {user ? (
                       <RatingBox itemId={itemId} />
                     ) : (
-                      <p className="text-sm text-muted">
-                        Entre para avaliar e comentar este título.
-                      </p>
+                      <p className="text-sm text-muted">{t('detail.signInRate')}</p>
                     )}
                   </div>
                 </div>
               </div>
               <div className="mt-16">
                 <TitleRow
-                  title="Mais títulos como este"
-                  subtitle={similar.data?.fallback ? 'Populares no momento' : undefined}
+                  title={t('detail.more')}
+                  subtitle={similar.data?.fallback ? t('detail.moreFallback') : undefined}
                   items={similar.data?.items}
                   loading={similar.isPending}
                   error={similar.isError}
@@ -198,7 +201,7 @@ export function Detail({ modal = false }: { modal?: boolean }) {
                   requestId={similar.data?.request_id}
                   modelVersion={similar.data?.model_version}
                   reasons={Object.fromEntries(
-                    (similar.data?.items || []).map(x => [x.id, reasonLabel(x.reason) ?? null]),
+                    (similar.data?.items || []).map(x => [x.id, reason(x)]),
                   )}
                 />
               </div>
@@ -220,13 +223,13 @@ export function Detail({ modal = false }: { modal?: boolean }) {
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={item?.title || 'Detalhes do título'}
+        aria-label={item?.title || t('detail.dialog')}
         className="relative h-full w-full max-w-6xl overflow-y-auto rounded-none outline-none md:max-h-[92vh] md:rounded-2xl"
       >
         <button
-          aria-label="Fechar detalhes"
+          aria-label={t('detail.close')}
           onClick={close}
-          className="absolute right-5 top-5 z-20 rounded-full bg-black/70 p-2.5 hover:bg-raised"
+          className="absolute right-5 top-5 z-20 rounded-full bg-black/70 p-2.5 text-white hover:bg-black/90"
         >
           <X />
         </button>

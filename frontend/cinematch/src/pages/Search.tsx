@@ -5,8 +5,9 @@ import { api } from '../lib/api';
 import { track } from '../lib/events';
 import { TitleCard } from '../components/TitleCard';
 import { ErrorState, SkeletonCards } from '../components/UI';
-import { genreLabel } from '../lib/labels';
+import { useT } from '../lib/i18n';
 export function Search() {
+  const { t, genre: genreLabel, number } = useT();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [type, setType] = useState('');
@@ -46,38 +47,34 @@ export function Search() {
     <div className="mx-auto min-h-[65vh] max-w-[1500px] px-5 py-12 md:px-10">
       <div className="mb-8">
         <span className="text-xs font-bold uppercase tracking-widest text-amber">
-          Explore o catálogo
+          {t('search.kicker')}
         </span>
-        <h1 className="mt-2 font-display text-3xl font-bold md:text-4xl">
-          Encontre sua próxima história
-        </h1>
-        <p className="mt-3 text-sm text-muted">
-          Filmes, séries e mundos inteiros esperando por você.
-        </p>
+        <h1 className="mt-2 font-display text-3xl font-bold md:text-4xl">{t('search.title')}</h1>
+        <p className="mt-3 text-sm text-muted">{t('search.subtitle')}</p>
       </div>
-      <div className="mb-7 flex items-center gap-3 rounded-xl border border-white/15 bg-surface px-4 focus-within:border-focus">
+      <div className="mb-7 flex items-center gap-3 rounded-xl border border-fg/15 bg-surface px-4 focus-within:border-focus">
         <SearchIcon className="text-muted" />
         <input
-          aria-label="Buscar filmes e séries"
+          aria-label={t('search.input')}
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="Busque por título..."
+          placeholder={t('search.placeholder')}
           className="w-full bg-transparent py-4 text-base outline-none placeholder:text-muted"
         />
       </div>
       <div className="mb-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-xs text-muted">
-          Tipo
+          {t('search.type')}
           <select className="field mt-1" value={type} onChange={e => setType(e.target.value)}>
-            <option value="">Todos</option>
-            <option value="movie">Filmes</option>
-            <option value="tv">Séries</option>
+            <option value="">{t('search.all')}</option>
+            <option value="movie">{t('search.movies')}</option>
+            <option value="tv">{t('search.series')}</option>
           </select>
         </label>
         <label className="text-xs text-muted">
-          Gênero
+          {t('search.genre')}
           <select className="field mt-1" value={genre} onChange={e => setGenre(e.target.value)}>
-            <option value="">Todos os gêneros</option>
+            <option value="">{t('search.allGenres')}</option>
             {genres.data?.map(g => (
               <option key={g.id} value={g.name}>
                 {genreLabel(g.name)}
@@ -86,45 +83,43 @@ export function Search() {
           </select>
         </label>
         <label className="text-xs text-muted">
-          Ano inicial
+          {t('search.yearFrom')}
           <input
             className="field mt-1"
             type="number"
             min="1900"
             max="2100"
-            placeholder="Ex: 2015"
+            placeholder={t('search.example', { year: 2015 })}
             value={from}
             onChange={e => setFrom(e.target.value)}
           />
         </label>
         <label className="text-xs text-muted">
-          Ano final
+          {t('search.yearTo')}
           <input
             className="field mt-1"
             type="number"
             min="1900"
             max="2100"
-            placeholder="Ex: 2026"
+            placeholder={t('search.example', { year: 2026 })}
             value={to}
             onChange={e => setTo(e.target.value)}
           />
         </label>
         <label className="text-xs text-muted">
-          Ordenar por
+          {t('search.sort')}
           <select className="field mt-1" value={sort} onChange={e => setSort(e.target.value)}>
-            <option value="popular">Popularidade</option>
-            <option value="top_rated">Melhor nota</option>
-            <option value="recent">Mais recentes</option>
+            <option value="popular">{t('search.sortPopular')}</option>
+            <option value="top_rated">{t('search.sortTop')}</option>
+            <option value="recent">{t('search.sortRecent')}</option>
           </select>
         </label>
       </div>
       {!active ? (
-        <div className="rounded-2xl border border-dashed border-white/15 py-20 text-center">
+        <div className="rounded-2xl border border-dashed border-fg/15 py-20 text-center">
           <SlidersHorizontal size={34} className="mx-auto text-amber" />
-          <h2 className="mt-4 font-display text-xl font-semibold">Por onde vamos começar?</h2>
-          <p className="mt-2 text-sm text-muted">
-            Experimente buscar “Aurora”, “Drama” ou selecione um gênero acima.
-          </p>
+          <h2 className="mt-4 font-display text-xl font-semibold">{t('search.startTitle')}</h2>
+          <p className="mt-2 text-sm text-muted">{t('search.startText')}</p>
         </div>
       ) : results.isPending ? (
         <SkeletonCards count={8} />
@@ -132,13 +127,13 @@ export function Search() {
         <ErrorState onRetry={() => results.refetch()} />
       ) : items.length === 0 ? (
         <div className="py-20 text-center">
-          <h2 className="font-display text-xl font-semibold">Nenhum resultado encontrado</h2>
-          <p className="mt-2 text-sm text-muted">Tente outro título ou amplie os filtros.</p>
+          <h2 className="font-display text-xl font-semibold">{t('search.noneTitle')}</h2>
+          <p className="mt-2 text-sm text-muted">{t('search.noneText')}</p>
         </div>
       ) : (
         <>
           <p className="mb-5 text-sm text-muted">
-            {results.data?.pages[0].total} títulos encontrados
+            {t('search.found', { count: number(results.data?.pages[0].total ?? 0) })}
           </p>
           <div className="grid grid-cols-2 justify-items-start gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7">
             {items.map((item, i) => (
@@ -152,7 +147,7 @@ export function Search() {
                 disabled={results.isFetchingNextPage}
                 onClick={() => void fetchMore()}
               >
-                {results.isFetchingNextPage ? 'Carregando...' : 'Carregar mais títulos'}
+                {results.isFetchingNextPage ? t('search.loading') : t('search.more')}
               </button>
             </div>
           )}

@@ -14,7 +14,7 @@ ITEM_TYPES: tuple[ItemType, ...] = ("movie", "tv")
 
 # TMDB limita /discover a 500 páginas.
 MAX_DISCOVER_PAGES = 500
-DETAIL_APPEND = "keywords,credits,external_ids"
+DETAIL_APPEND = "keywords,credits,external_ids,translations"
 
 
 @dataclass(frozen=True)
@@ -84,3 +84,7 @@ class TmdbClient:
 
     def details(self, item_type: ItemType, tmdb_id: int) -> dict[str, Any]:
         return self.http.get_json(f"/{item_type}/{tmdb_id}", params=self.details_params())
+
+    def translations(self, item_type: ItemType, tmdb_id: int) -> dict[str, Any]:
+        """Todas as traduções do item (título/sinopse por idioma). Sem parâmetro de idioma."""
+        return self.http.get_json(f"/{item_type}/{tmdb_id}/translations")

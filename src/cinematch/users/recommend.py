@@ -21,6 +21,7 @@ from typing import Any
 from sqlalchemy import Connection, text
 
 from cinematch.serving import catalog as cat
+from cinematch.serving.reasons import Reason
 
 GAMMA = 0.5
 POOL = 200
@@ -54,15 +55,17 @@ def personalized(
     k: int,
     max_per_collection: int = 2,
     today: date | None = None,
+    lang: str = cat.ORIGINAL_LANG,
 ) -> dict[str, Any]:
-    picked: list[tuple[dict[str, Any], float, str | None]] = []
+    """Itens como `(linha, escore normalizado, motivo estruturado)`."""
+    picked: list[tuple[dict[str, Any], float, Reason | None]] = []
     if neighbor_version:
         rows = conn.execute(_SCORED_SQL, {"u": user_id, "mv": neighbor_version, "pool": POOL})
         scored = [
             (r.neighbor_id, float(r.score), r.top_seed) for r in rows if r.neighbor_id not in seen
         ]
         summaries = cat.summaries_by_ids(
-            conn, [c for c, _, _ in scored] + list({s for _, _, s in scored})
+            conn, [c for c, _, _ in scored] + list({s for _, _, s in scored}), lang
         )
         per_coll: dict[int, int] = {}
         for cand, score, seed in scored:
@@ -75,7 +78,7 @@ def personalized(
                     continue
                 per_coll[coll] = per_coll.get(coll, 0) + 1
             seed_title = summaries.get(seed, {}).get("title")
-            picked.append((row, score, f"Porque você curtiu {seed_title}" if seed_title else None))
+            picked.append((row, score, ("because_liked", [seed_title]) if seed_title else None))
             if len(picked) == k:
                 break
     if picked:
@@ -88,21 +91,23 @@ def personalized(
     return {
         "model_version": f"fallback:{cat.BAYES_VERSION}",
         "fallback": True,
-        "items": _fallback(conn, seen, genres, k, today),
+        "items": _fallback(conn, seen, genres, k, today, lang),
     }
 
 
 def _fallback(
-    conn: Connection, seen: set[int], genres: list[str], k: int, today: date | None
-) -> list[tuple[dict[str, Any], float, str | None]]:
-    out: list[tuple[dict[str, Any], float, str | None]] = []
+    conn: Connection, seen: set[int], genres: list[str], k: int, today: date | None, lang: str
+) -> list[tuple[dict[str, Any], float, Reason | None]]:
+    out: list[tuple[dict[str, Any], float, Reason | None]] = []
     for genre in [*genres[:3], None]:
-        query = cat.ListQuery(genre=genre, sort="top_rated", page_size=k + len(seen), today=today)
+        query = cat.ListQuery(
+            genre=genre, sort="top_rated", page_size=k + len(seen), today=today, lang=lang
+        )
         rows, _ = cat.list_items(conn, query)
         for row in rows:
             if row["id"] in seen or any(r["id"] == row["id"] for r, _, _ in out):
                 continue
-            reason = f"Popular em {genre}" if genre else "Mais bem avaliados"
+            reason: Reason = ("popular_genre", [genre]) if genre else ("top_rated", [])
             out.append((row, 0.0, reason))
             if len(out) == k:
                 return out

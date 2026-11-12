@@ -243,3 +243,31 @@ Formato curto: contexto → decisão → consequências. Status: **Aceita**, **P
 - `redirect_uri` derivado da origem do navegador (Host preservado pelo proxy) e aceito só se a origem estiver na lista permitida; `next` só aceita caminhos relativos (sem open redirect).
 **Alternativas:** Google Identity Services só no frontend (token no navegador; exigiria validar no backend do mesmo jeito); bibliotecas como Authlib (mais dependências para um único provedor).
 **Consequência:** novos provedores reaproveitam `user_identities` e `oauth_states`.
+
+## ADR-023 — Destaque da home: personalizado para logados, rodízio semanal para visitantes
+**Status:** Aceita (2026-11-12)
+**Contexto:** o destaque era o item mais popular do catálogo. A popularidade é um retrato do TMDB na última coleta, então o mesmo título (Phineas and Ferb) ficava em destaque para todos até a próxima coleta.
+**Decisão:**
+- `GET /featured`. Logado com perfil (sementes): o recomendado de maior escore (Rocchio, ADR-020) que tem imagem de fundo, com o motivo "Porque você curtiu X". Visitante, ou logado sem sementes: rodízio semanal.
+- **Rodízio:** os 5 filmes e as 5 séries mais populares que já foram lançados, com ≥ 100 votos e nota bayesiana ≥ média do tipo. Por tipo porque, pela popularidade do TMDB, 9 dos 10 mais populares eram séries.
+- **Ordem do rodízio:** semanas contadas a partir de uma segunda-feira fixa. Cada ciclo de n semanas percorre os n candidatos numa ordem embaralhada por `sha256(ciclo:id)`. Resultado: nenhum candidato se repete no ciclo, o destaque é igual para todos na mesma semana e não há estado no banco.
+- Resposta com `kind`, `period` (semana ISO) e `model_version` (`weekly_v2:...` ou `profile_rocchio_v1|...`), para atribuir cliques ao destaque.
+- Favoritar o destaque não recarrega o destaque: o título não troca na frente do usuário.
+**Alternativas:** sorteio com reposição por semana (repetia o mesmo título 3 vezes em 8 semanas); tabela de agenda editorial (estado e manutenção manual).
+
+## ADR-024 — Idioma de exibição (pt-BR/en) e tema claro/escuro
+**Status:** Aceita (2026-11-12)
+**Contexto:** a coleta TMDB é em `en-US`, então títulos e sinopses apareciam em inglês numa interface em português.
+**Decisão:**
+- Tabela `item_translations` (`item_id`, `language`) com título e sinopse de exibição, vindos do endpoint `translations` do TMDB.
+  - O título usa só a tradução brasileira, porque os títulos de Portugal costumam ser outros.
+  - A sinopse aceita pt-PT como reserva, registrada em `source_language`.
+  - Sem tradução, grava `none`.
+- As coletas novas pedem `translations` no `append_to_response`, sem custo de requisição. A tradução fica fora do `content_hash`, então não muda o conteúdo do item. Os itens antigos são cobertos por `ingest translations`: 1 requisição por item, retomável, com o bruto no Bronze.
+- A API aceita `lang=pt-BR|en` (padrão pt-BR) e usa `COALESCE(tradução, original)`.
+  - A busca encontra o título em qualquer idioma armazenado.
+  - O detalhe informa `overview_language`, e o frontend avisa quando a sinopse está em inglês.
+- **Só exibição:** TF-IDF, embeddings e rerankers continuam no texto original. As métricas offline não mudam.
+- Motivos de recomendação estruturados (`reason_key` + `reason_args`) e traduzidos no frontend. O campo `reason` em pt-BR continua na resposta, por compatibilidade.
+- **Tema:** cores como variáveis CSS (canais RGB) com conjuntos escuro e claro, consumidas pelo Tailwind. O âmbar fica mais escuro no tema claro, para manter contraste ≥ 4,5. O padrão segue o sistema operacional, e a escolha fica no `localStorage`.
+**Alternativas:** coletar tudo de novo em pt-BR (perderia o texto original usado pelos modelos); traduzir automaticamente (custo e risco de erro em nomes próprios).

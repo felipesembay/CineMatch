@@ -12,7 +12,16 @@ import { MyList } from './pages/MyList';
 import { About } from './pages/About';
 import './index.css';
 import { auth } from './lib/auth';
+import { prefs } from './lib/prefs';
 const client = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } });
+// Troca de idioma: títulos e sinopses vêm da API no novo idioma, então recarrega o cache.
+let currentLang = prefs.get().lang;
+prefs.subscribe(() => {
+  if (prefs.get().lang !== currentLang) {
+    currentLang = prefs.get().lang;
+    void client.resetQueries();
+  }
+});
 function App() {
   const location = useLocation();
   const background = location.state?.backgroundLocation;

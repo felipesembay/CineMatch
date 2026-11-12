@@ -1,20 +1,18 @@
+import { useT } from '../lib/i18n';
+
 export function About() {
+  const { t } = useT();
   return (
     <article className="mx-auto min-h-[65vh] max-w-3xl px-5 py-16">
-      <span className="text-xs font-bold uppercase tracking-widest text-amber">Transparência</span>
-      <h1 className="mt-3 font-display text-4xl font-bold">Sobre o CineMatch</h1>
-      <p className="mt-7 leading-8 text-muted">
-        CineMatch é uma experiência independente de descoberta de filmes e séries. Nossas
-        recomendações são geradas por modelos desenvolvidos pelo próprio CineMatch, a partir de
-        preferências e interações dos usuários.
-      </p>
-      <h2 className="mt-10 font-display text-xl font-bold">Fontes de dados</h2>
+      <span className="text-xs font-bold uppercase tracking-widest text-amber">
+        {t('about.kicker')}
+      </span>
+      <h1 className="mt-3 font-display text-4xl font-bold">{t('about.title')}</h1>
+      <p className="mt-7 leading-8 text-muted">{t('about.p1')}</p>
+      <h2 className="mt-10 font-display text-xl font-bold">{t('about.sources')}</h2>
+      <p className="mt-4 leading-8 text-muted">{t('about.p2')}</p>
       <p className="mt-4 leading-8 text-muted">
-        Os metadados de filmes e parte das séries podem ser obtidos da API do The Movie Database
-        (TMDB). This product uses the TMDB API but is not endorsed or certified by TMDB.
-      </p>
-      <p className="mt-4 leading-8 text-muted">
-        Dados de séries parcialmente de{' '}
+        {t('about.p3a')}{' '}
         <a
           className="text-amber underline"
           href="https://www.tvmaze.com"
@@ -23,14 +21,10 @@ export function About() {
         >
           TVmaze
         </a>
-        , sob licença CC BY-SA 4.0. Consulte as respectivas fontes para detalhes e condições de uso.
+        {t('about.p3b')}
       </p>
-      <h2 className="mt-10 font-display text-xl font-bold">Modo de demonstração</h2>
-      <p className="mt-4 leading-8 text-muted">
-        Com mocks habilitados, os títulos, capas, sinopses e perfis são inteiramente fictícios.
-        Nenhuma informação é enviada para serviços externos pelo modo de demonstração. O backend
-        FastAPI é independente deste frontend.
-      </p>
+      <h2 className="mt-10 font-display text-xl font-bold">{t('about.langTitle')}</h2>
+      <p className="mt-4 leading-8 text-muted">{t('about.p4')}</p>
     </article>
   );
 }

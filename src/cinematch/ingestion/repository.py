@@ -24,10 +24,11 @@ from cinematch.data.schema import (
     item_external_ids,
     item_genres,
     item_keywords,
+    item_translations,
     keywords,
     people,
 )
-from cinematch.ingestion.tmdb.normalize import CatalogRecord
+from cinematch.ingestion.tmdb.normalize import CatalogRecord, TranslationRecord
 
 logger = logging.getLogger(__name__)
 
@@ -360,6 +361,23 @@ def _sync_children(conn: Connection, item_id: int, rec: CatalogRecord) -> None:
     _sync_credits(conn, item_id, rec)
 
 
+def upsert_translation(
+    conn: Connection, item_id: int, tr: TranslationRecord, raw_uri: str | None
+) -> None:
+    values = {
+        "title": tr.title,
+        "overview": tr.overview,
+        "source_language": tr.source_language,
+        "raw_uri": raw_uri,
+        "fetched_at": func.now(),
+    }
+    conn.execute(
+        pg_insert(item_translations)
+        .values(item_id=item_id, language=tr.language, **values)
+        .on_conflict_do_update(index_elements=["item_id", "language"], set_=values)
+    )
+
+
 def upsert_item(conn: Connection, rec: CatalogRecord, prov: Provenance) -> UpsertOutcome:
     """Insere ou atualiza um item. Deve rodar dentro de uma transação."""
     ext = item_external_ids.c
@@ -391,6 +409,8 @@ def upsert_item(conn: Connection, rec: CatalogRecord, prov: Provenance) -> Upser
         )
         _sync_children(conn, item_id, rec)
         sync_crosswalk(conn, item_id, rec, prov)
+        if rec.translation is not None:
+            upsert_translation(conn, item_id, rec.translation, prov.raw_uri)
         return "inserted"
 
     item_id = existing.item_id
@@ -408,6 +428,8 @@ def upsert_item(conn: Connection, rec: CatalogRecord, prov: Provenance) -> Upser
         .values(last_synced_at=prov.synced_at, last_run_id=prov.run_id, raw_uri=prov.raw_uri)
     )
     sync_crosswalk(conn, item_id, rec, prov)
+    if rec.translation is not None:
+        upsert_translation(conn, item_id, rec.translation, prov.raw_uri)
     if changed:
         _sync_children(conn, item_id, rec)
         return "updated"

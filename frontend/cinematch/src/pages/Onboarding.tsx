@@ -5,9 +5,10 @@ import { Check, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { api } from '../lib/api';
 import { auth, useAuth, useAuthReady } from '../lib/auth';
 import { Poster, ErrorState, SkeletonCards, Loading } from '../components/UI';
-import { genreLabel } from '../lib/labels';
+import { useT } from '../lib/i18n';
 export function Onboarding() {
   const user = useAuth();
+  const { t, genre: genreLabel } = useT();
   const ready = useAuthReady();
   const nav = useNavigate();
   const [step, setStep] = useState(1);
@@ -38,13 +39,13 @@ export function Onboarding() {
     <div className="mx-auto min-h-[70vh] max-w-5xl px-5 py-12 md:px-10">
       <div className="mb-8 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-widest text-amber">
-          Seu perfil de gostos
+          {t('onb.kicker')}
         </span>
         <button
           className="text-sm text-muted hover:text-ink"
           onClick={() => (step === 1 ? setStep(2) : save.mutate())}
         >
-          Pular
+          {t('onb.skip')}
         </button>
       </div>
       <div className="mb-10 h-1.5 overflow-hidden rounded-full bg-raised">
@@ -59,13 +60,9 @@ export function Onboarding() {
         />
       </div>
       <h1 className="font-display text-3xl font-bold">
-        {step === 1 ? 'Quais histórias movem você?' : 'Conte o que você curte.'}
+        {step === 1 ? t('onb.step1Title') : t('onb.step2Title')}
       </h1>
-      <p className="mt-3 text-muted">
-        {step === 1
-          ? 'Escolha seus gêneros favoritos. Você pode mudar depois.'
-          : 'Marque 👍 ou 👎 nos títulos que conhece. Não precisa avaliar todos.'}
-      </p>
+      <p className="mt-3 text-muted">{step === 1 ? t('onb.step1Text') : t('onb.step2Text')}</p>
       {step === 1 ? (
         <div className="mt-9">
           {genres.isPending ? (
@@ -83,7 +80,7 @@ export function Onboarding() {
                       a.includes(g.name) ? a.filter(x => x !== g.name) : [...a, g.name],
                     )
                   }
-                  className={`rounded-xl border px-5 py-3 text-sm transition-colors ${selected.includes(g.name) ? 'border-amber bg-amber/15 text-amber' : 'border-white/15 bg-surface hover:bg-raised'}`}
+                  className={`rounded-xl border px-5 py-3 text-sm transition-colors ${selected.includes(g.name) ? 'border-amber bg-amber/15 text-amber' : 'border-fg/15 bg-surface hover:bg-raised'}`}
                 >
                   {selected.includes(g.name) && <Check size={14} className="mr-2 inline" />}
                   {genreLabel(g.name)}
@@ -92,7 +89,7 @@ export function Onboarding() {
             </div>
           )}
           <button onClick={() => setStep(2)} className="btn btn-primary mt-10">
-            Continuar
+            {t('onb.continue')}
           </button>
         </div>
       ) : (
@@ -121,7 +118,7 @@ export function Onboarding() {
                     <p className="mb-3 line-clamp-1 text-sm font-semibold">{item.title}</p>
                     <div className="flex justify-between gap-2">
                       <button
-                        aria-label={`Gostei de ${item.title}`}
+                        aria-label={t('onb.like', { title: item.title })}
                         aria-pressed={liked.includes(item.id)}
                         onClick={() => choose(item.id, true)}
                         className={`rounded-lg p-2 ${liked.includes(item.id) ? 'bg-amber text-background' : 'bg-raised text-muted'}`}
@@ -129,7 +126,7 @@ export function Onboarding() {
                         <ThumbsUp size={17} />
                       </button>
                       <button
-                        aria-label={`Não gostei de ${item.title}`}
+                        aria-label={t('onb.dislike', { title: item.title })}
                         aria-pressed={disliked.includes(item.id)}
                         onClick={() => choose(item.id, false)}
                         className={`rounded-lg p-2 ${disliked.includes(item.id) ? 'bg-amber text-background' : 'bg-raised text-muted'}`}
@@ -143,7 +140,7 @@ export function Onboarding() {
                         }}
                         className="text-[11px] text-muted hover:text-ink"
                       >
-                        Não conheço
+                        {t('onb.unknown')}
                       </button>
                     </div>
                   </div>
@@ -156,10 +153,10 @@ export function Onboarding() {
             onClick={() => save.mutate()}
             className="btn btn-primary mt-10"
           >
-            {save.isPending ? 'Salvando...' : 'Concluir e descobrir'}
+            {save.isPending ? t('onb.saving') : t('onb.finish')}
           </button>
           {save.isError && (
-            <p className="mt-3 text-sm text-red-300">Erro ao salvar. Tente novamente.</p>
+            <p className="mt-3 text-sm text-red-600 dark:text-red-300">{t('onb.error')}</p>
           )}
         </>
       )}

@@ -3,10 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { track } from '../lib/events';
+import { useT } from '../lib/i18n';
 
 /** Nota de 1 a 5 com comentário opcional. Alimenta "Minha lista" e a recomendação. */
 export function RatingBox({ itemId }: { itemId: number }) {
   const qc = useQueryClient();
+  const { t } = useT();
   const ratings = useQuery({ queryKey: ['ratings'], queryFn: api.ratings });
   const current = ratings.data?.find(r => r.item.id === itemId);
   const [value, setValue] = useState(0);
@@ -41,13 +43,13 @@ export function RatingBox({ itemId }: { itemId: number }) {
 
   return (
     <div>
-      <div className="flex items-center gap-1" role="radiogroup" aria-label="Sua nota">
+      <div className="flex items-center gap-1" role="radiogroup" aria-label={t('rating.group')}>
         {[1, 2, 3, 4, 5].map(v => (
           <button
             key={v}
             role="radio"
             aria-checked={value === v}
-            aria-label={`${v} estrela${v > 1 ? 's' : ''}`}
+            aria-label={t(v > 1 ? 'rating.stars' : 'rating.star', { n: v })}
             onClick={() => {
               setValue(v);
               setSaved(false);
@@ -59,7 +61,7 @@ export function RatingBox({ itemId }: { itemId: number }) {
         ))}
       </div>
       <label className="mt-4 block text-sm text-muted">
-        Comentário (opcional)
+        {t('rating.comment')}
         <textarea
           value={comment}
           maxLength={1000}
@@ -68,7 +70,7 @@ export function RatingBox({ itemId }: { itemId: number }) {
             setComment(e.target.value);
             setSaved(false);
           }}
-          placeholder="O que você achou?"
+          placeholder={t('rating.placeholder')}
           className="field mt-2 resize-y"
         />
       </label>
@@ -78,7 +80,7 @@ export function RatingBox({ itemId }: { itemId: number }) {
           disabled={!value || save.isPending}
           onClick={() => save.mutate()}
         >
-          {save.isPending ? 'Salvando...' : current ? 'Atualizar avaliação' : 'Salvar avaliação'}
+          {save.isPending ? t('rating.saving') : current ? t('rating.update') : t('rating.save')}
         </button>
         {current && (
           <button
@@ -86,14 +88,14 @@ export function RatingBox({ itemId }: { itemId: number }) {
             disabled={remove.isPending}
             onClick={() => remove.mutate()}
           >
-            Remover
+            {t('rating.remove')}
           </button>
         )}
         {saved && !save.isPending && (
-          <span className="text-xs text-amber">Salvo na sua lista.</span>
+          <span className="text-xs text-amber">{t('rating.saved')}</span>
         )}
         {(save.isError || remove.isError) && (
-          <span className="text-xs text-red-300">Não foi possível salvar. Tente novamente.</span>
+          <span className="text-xs text-red-600 dark:text-red-300">{t('rating.error')}</span>
         )}
       </div>
     </div>

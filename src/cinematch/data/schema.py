@@ -476,3 +476,23 @@ oauth_states = Table(
     Column("next_path", String(200), nullable=False),
     _ts("created_at"),
 )
+
+# Traduções de exibição (título/sinopse) por idioma, vindas do endpoint `translations` do TMDB.
+# Só exibição: features e modelos continuam no texto original (en-US). `source_language` diz
+# de qual tradução veio o texto (pt-BR; pt-PT como reserva quando falta a brasileira).
+item_translations = Table(
+    "item_translations",
+    metadata,
+    Column(
+        "item_id",
+        BigInteger,
+        ForeignKey("catalog_items.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("language", String(8), primary_key=True),
+    Column("title", Text),
+    Column("overview", Text),
+    Column("source_language", String(8), nullable=False),
+    Column("raw_uri", Text),
+    _ts("fetched_at"),
+)

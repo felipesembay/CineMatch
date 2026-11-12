@@ -147,6 +147,29 @@ def cmd_link_tvmaze(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ingest_translations(args: argparse.Namespace) -> int:
+    from cinematch.db import get_engine
+    from cinematch.ingestion.raw_store import LocalRawStore
+    from cinematch.ingestion.tmdb.client import TmdbClient
+    from cinematch.ingestion.tmdb.translations import backfill_translations, missing_items
+
+    settings = get_settings()
+    engine = get_engine()
+    if args.dry_run:
+        pending = missing_items(engine)
+        print(json.dumps({"pending": len(pending), "requests": len(pending)}))
+        return 0
+    client = TmdbClient.from_settings(TmdbSettings())
+    try:
+        stats = backfill_translations(
+            engine, client, LocalRawStore(settings.bronze_dir), max_items=args.max_items
+        )
+    finally:
+        client.close()
+    print(json.dumps(stats, indent=2))
+    return 0
+
+
 def cmd_reprocess_tmdb(_args: argparse.Namespace) -> int:
     from cinematch.db import get_engine
     from cinematch.ingestion.tmdb.backfill import reprocess_tmdb_bronze
@@ -490,6 +513,12 @@ def build_parser() -> argparse.ArgumentParser:
     refresh.add_argument("--batch-size", type=int, default=50)
     refresh.set_defaults(func=cmd_ingest_tmdb_refresh)
 
+    tr = ingest.add_parser(
+        "translations", help="traduções pt-BR (título/sinopse) dos itens que ainda não têm"
+    )
+    tr.add_argument("--max-items", type=int, default=None)
+    tr.add_argument("--dry-run", action="store_true", help="só conta os pendentes")
+    tr.set_defaults(func=cmd_ingest_translations)
     tvmaze = ingest.add_parser("tvmaze", help="varre o índice de shows do TVmaze")
     pages = tvmaze.add_mutually_exclusive_group()
     pages.add_argument("--max-pages", type=int, default=2, help="páginas de 250 shows (padrão 2)")

@@ -71,6 +71,24 @@ export async function mockRequest(method: string, path: string, body?: unknown):
         .slice(0, Number(url.searchParams.get('k') || 12)),
     );
   }
+  if (p === '/featured') {
+    const item = titles.find(t => t.backdrop_url) ?? titles[0];
+    return {
+      kind: 'weekly',
+      period: '2026-W46',
+      request_id: crypto.randomUUID(),
+      model_version: 'mock-weekly',
+      item: {
+        ...item,
+        score: 1,
+        reason: 'Destaque da semana',
+        reason_key: 'weekly_pick',
+        reason_args: [],
+      },
+      overview: 'Sinopse fictícia do modo de demonstração.',
+      overview_language: 'pt-BR',
+    };
+  }
   if (p === '/recommendations/me')
     return rec(
       titles

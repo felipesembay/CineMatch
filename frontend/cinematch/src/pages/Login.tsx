@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { auth } from '../lib/auth';
 import { Brand } from '../components/UI';
+import { useT } from '../lib/i18n';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -11,11 +12,10 @@ export function Login() {
   const [name, setName] = useState('');
   const [register, setRegister] = useState(false);
   const [params] = useSearchParams();
-  const [error, setError] = useState<string | null>(
-    params.get('error') === 'google'
-      ? 'Não foi possível entrar com o Google. Tente novamente.'
-      : null,
-  );
+  const { t } = useT();
+  const [error, setError] = useState<string | null>(null);
+  // Erro do Google vem na URL (?error=google): traduzido no idioma atual enquanto não houver outro.
+  const shownError = error ?? (params.get('error') === 'google' ? t('login.googleError') : null);
   const providers = useQuery({ queryKey: ['auth-providers'], queryFn: api.providers });
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
@@ -32,7 +32,7 @@ export function Login() {
       qc.clear();
       nav(user.onboarded ? '/' : '/onboarding');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível entrar.');
+      setError(err instanceof Error ? err.message : t('login.failed'));
     } finally {
       setBusy(false);
     }
@@ -43,37 +43,32 @@ export function Login() {
       <div className="mb-8">
         <Brand />
         <h1 className="mt-8 font-display text-3xl font-bold">
-          {register ? 'Crie sua conta' : 'Que bom ter você aqui.'}
+          {register ? t('login.registerTitle') : t('login.title')}
         </h1>
         <p className="mt-3 text-sm text-muted">
-          {register
-            ? 'Seu universo de descobertas começa agora.'
-            : 'Entre e continue descobrindo histórias incríveis.'}
+          {register ? t('login.registerText') : t('login.text')}
         </p>
       </div>
       {providers.data?.google && (
         <>
           <a
             href={api.googleLoginUrl()}
-            className="btn w-full border-white/15 bg-white text-[#1f1f1f] hover:bg-white/90"
+            className="btn w-full border-fg/15 bg-white text-[#1f1f1f] hover:bg-white/90"
           >
             <GoogleIcon />
-            Continuar com Google
+            {t('login.google')}
           </a>
           <div className="my-6 flex items-center gap-3 text-xs text-muted">
-            <span className="h-px flex-1 bg-white/10" />
-            ou com e-mail
-            <span className="h-px flex-1 bg-white/10" />
+            <span className="h-px flex-1 bg-fg/10" />
+            {t('login.orEmail')}
+            <span className="h-px flex-1 bg-fg/10" />
           </div>
         </>
       )}
-      <form
-        className="space-y-5 rounded-2xl border border-white/10 bg-surface p-7"
-        onSubmit={submit}
-      >
+      <form className="space-y-5 rounded-2xl border border-fg/10 bg-surface p-7" onSubmit={submit}>
         {register && (
           <label className="block text-sm">
-            Nome (opcional)
+            {t('login.name')}
             <input
               value={name}
               maxLength={80}
@@ -84,19 +79,19 @@ export function Login() {
           </label>
         )}
         <label className="block text-sm">
-          E-mail
+          {t('login.email')}
           <input
             required
             type="email"
             autoComplete="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            placeholder="voce@exemplo.com"
+            placeholder={t('login.emailPlaceholder')}
             className="field mt-2"
           />
         </label>
         <label className="block text-sm">
-          Senha
+          {t('login.password')}
           <input
             required
             type="password"
@@ -105,17 +100,20 @@ export function Login() {
             autoComplete={register ? 'new-password' : 'current-password'}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            placeholder="mínimo de 8 caracteres"
+            placeholder={t('login.passwordPlaceholder')}
             className="field mt-2"
           />
         </label>
-        {error && (
-          <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-            {error}
+        {shownError && (
+          <p
+            role="alert"
+            className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-300"
+          >
+            {shownError}
           </p>
         )}
         <button type="submit" disabled={busy} className="btn btn-primary w-full">
-          {busy ? 'Aguarde...' : register ? 'Criar conta' : 'Entrar'}
+          {busy ? t('login.wait') : register ? t('login.create') : t('login.submit')}
         </button>
       </form>
       <button
@@ -125,7 +123,7 @@ export function Login() {
         }}
         className="mt-6 text-sm text-amber hover:underline"
       >
-        {register ? 'Já tem uma conta? Entrar' : 'Ainda não tem conta? Cadastre-se'}
+        {register ? t('login.toLogin') : t('login.toRegister')}
       </button>
     </div>
   );

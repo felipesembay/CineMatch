@@ -48,6 +48,17 @@ No container: `docker compose run --rm api cinematch ingest tmdb --max-items 50`
 
 Saída: JSON com `run_id`, `status` (`succeeded`/`partial`/`failed`) e métricas (`discovered`, `inserted`, `updated`, `unchanged`, `not_found`, `failed`, `http_requests`, `http_retries`, `http_rate_limited`, `duration_s`). Exit 0 só em `succeeded`.
 
+## Traduções pt-BR (título e sinopse)
+
+Coletas novas já trazem `translations` no `append_to_response` dos detalhes. Para itens coletados antes:
+
+```bash
+uv run cinematch ingest translations --dry-run        # quantos itens faltam (= requisições)
+uv run cinematch ingest translations                  # 1 req/item; retomável; Bronze entity=<tipo>_translations
+```
+
+Título só da tradução brasileira (os títulos de Portugal costumam ser outros); a sinopse aceita pt-PT como reserva. Itens sem tradução gravam `source_language='none'` e não são buscados de novo.
+
 ## Ingestão TVmaze e resolução de entidades
 
 API pública, sem chave, licença CC BY-SA 4.0 (ver [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)).
@@ -100,7 +111,8 @@ uv run cinematch evaluate api-latency --out docs/experiments/<arquivo>.json
 | `GET /genres` | gêneros com contagem de itens |
 | `GET /movies` | busca (`q`), filtros (`type`, `genre`, `year_from`, `year_to`), `sort=popular\|top_rated\|recent\|relevance`, paginação; omite não lançados salvo `include_unreleased=true` |
 | `GET /movies/{id}` | detalhe com elenco, direção, keywords e links externos |
-| `GET /movies/{id}/similar` | vizinhos do conjunto ativo, `max_per_collection` (diversidade), `reason`, `model_version`, `request_id`, `fallback` |
+| `GET /movies/{id}/similar` | vizinhos do conjunto ativo, `max_per_collection` (diversidade), `reason` (pt-BR) e `reason_key`/`reason_args` (estruturado), `model_version`, `request_id`, `fallback` |
+| `GET /featured` | destaque da home: `personal` (logado com perfil) ou `weekly` (rodízio da semana ISO) |
 | `POST /auth/register` · `/auth/login` · `/auth/logout` · `GET /auth/me` | conta e sessão (cookie `httpOnly`) |
 | `GET/PUT /users/me/preferences` | gêneros, curtidos e não curtidos (onboarding) |
 | `GET/PUT/DELETE /users/me/favorites[/{id}]` | favoritos |
@@ -108,6 +120,8 @@ uv run cinematch evaluate api-latency --out docs/experiments/<arquivo>.json
 | `GET /recommendations/me` | "Achamos que você vai gostar" (Rocchio sobre vizinhos ativos) |
 | `POST /events` | eventos idempotentes (impressões, cliques, favoritos, buscas) |
 | `DELETE /users/me` | exclusão de conta e dados (LGPD) |
+
+Rotas que devolvem títulos aceitam `lang=pt-BR` (padrão) ou `lang=en`: título e sinopse vêm de `item_translations` quando há tradução, senão do original. O detalhe informa `overview_language`.
 
 Imagens vêm do CDN do TMDB; o frontend exibe a atribuição do TMDB. Em produção, frontend e API na mesma origem (nginx `/api`); `CINEMATCH_COOKIE_SECURE=true` com HTTPS. CORS/origens permitidas: `CINEMATCH_CORS_ORIGINS` (lista JSON).
 

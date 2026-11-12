@@ -12,7 +12,7 @@
 | **Modelos comparados** | TF-IDF, Sentence Transformers, RRF, Rocchio, LogisticRegression, SGD, LightGBM (LambdaRank) |
 | **Em produção** | similares por TF-IDF (vizinhos pré-computados) + recomendação personalizada por Rocchio |
 | **Latência** | `/movies/{id}/similar`: p95 18,8 ms com Postgres local; 222 ms com o banco no Azure (RTT ~40 ms) |
-| **Qualidade** | 159 testes (unitários + integração com Postgres), lint e build no CI |
+| **Qualidade** | 168 testes (unitários + integração com Postgres), lint e build no CI |
 
 ---
 
@@ -32,7 +32,10 @@
 
 ## O que o app faz
 
-- **Home:** destaque, "Em alta", "Mais bem avaliados" (média bayesiana) e fileiras por gênero.
+- **Home:**
+  - **Destaque:** para quem está logado com perfil, o recomendado mais bem pontuado ("Escolhido para você"). Para visitantes, um rodízio semanal sem repetição entre os 5 filmes e as 5 séries mais populares e bem avaliados.
+  - "Em alta", "Mais bem avaliados" (média bayesiana) e fileiras por gênero.
+- **Idioma e tema:** botões PT/EN e claro/escuro no topo, guardados no navegador. Títulos e sinopses em português vêm das traduções do TMDB; sem tradução, aparece o original em inglês.
 - **Detalhe:** sinopse, elenco, direção e "Mais títulos como este", com o motivo de cada recomendação ("Da coleção…", "Direção de…", "Com…").
 - **Busca:** por título, com filtros de tipo, gênero, ano e ordenação.
 - **Onboarding:** gêneros favoritos e 👍 / 👎 em títulos conhecidos, sem exigir um número mínimo.
@@ -153,6 +156,8 @@ Histórico dos experimentos: [similaridade de conteúdo](docs/experiments/conten
 |---|---|
 | **Similares** (`/movies/{id}/similar`) | Top-50 vizinhos do conjunto ativo (TF-IDF), no máximo 3 por coleção (diversidade), motivo por sobreposição de metadados, fallback bayesiano por gênero. Resposta com `model_version` e `request_id`. |
 | **Para você** (`/recommendations/me`) | Rocchio no espaço de escores: `score(c) = Σ wₛ · sim(s, c)` sobre os vizinhos das sementes. Pesos: curtido e favorito +1, nota (n − 3)/2, não curtido −0,5. Exclui itens já vistos, no máximo 2 por coleção, motivo "Porque você curtiu X". Usuário novo recebe os mais bem avaliados dos gêneros escolhidos. |
+| **Destaque** (`/featured`) | Logado com perfil: o 1º recomendado (Rocchio) com imagem de fundo. Visitante ou logado sem perfil: rodízio por semana ISO entre os 5 filmes e 5 séries mais populares, já lançados, com ≥ 100 votos e nota bayesiana ≥ média do tipo. A ordem de cada ciclo é embaralhada por hash, sem repetir em 10 semanas, determinística e sem estado. |
+| **Idioma** (`?lang=pt-BR\|en`) | Título e sinopse de `item_translations` (tradução brasileira do TMDB; sinopse com reserva pt-PT), com volta ao original. Só exibição: features e modelos usam o texto original. Motivos de recomendação vêm estruturados (`reason_key` + `reason_args`) e o frontend traduz. |
 | **Ranking "mais bem avaliados"** | Média bayesiana por tipo: `(v·R + m·C)/(v + m)`, com m = percentil 75 de votos. Títulos com poucos votos não dominam. |
 | **Versões** | `recs build-similar` grava um conjunto de vizinhos versionado e registra o build no MLflow. `recs activate` troca o conjunto servido numa transação. O reranker fica gravado como challenger para teste A/B. |
 | **Eventos** | `POST /events`: impressões (≥ 50% visível por ≥ 1 s), cliques, favoritos e buscas, idempotentes por `event_id`, com `request_id`, posição e `model_version` para atribuição de exposição. |

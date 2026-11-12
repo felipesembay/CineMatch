@@ -20,6 +20,7 @@ export const itemDetailSchema = itemSummarySchema.extend({
   directors: z.array(z.string()),
   cast: z.array(z.string()),
   keywords: z.array(z.string()),
+  overview_language: z.string().nullable().optional(),
   external: z.object({
     tmdb_url: z.string().nullable(),
     imdb_url: z.string().nullable(),
@@ -31,6 +32,17 @@ export const pageSchema = <T extends z.ZodTypeAny>(item: T) =>
 export const recommendationSchema = itemSummarySchema.extend({
   score: z.number(),
   reason: z.string().nullable(),
+  reason_key: z.string().nullable().optional(),
+  reason_args: z.array(z.string()).optional(),
+});
+export const featuredSchema = z.object({
+  kind: z.enum(['personal', 'weekly']),
+  period: z.string(),
+  request_id: z.string(),
+  model_version: z.string(),
+  item: recommendationSchema,
+  overview: z.string().nullable(),
+  overview_language: z.string().nullable(),
 });
 export const recommendationListSchema = z.object({
   request_id: z.string(),
@@ -68,6 +80,7 @@ export type ItemSummary = z.infer<typeof itemSummarySchema>;
 export type ItemDetail = z.infer<typeof itemDetailSchema>;
 export type Recommendation = z.infer<typeof recommendationSchema>;
 export type RecommendationList = z.infer<typeof recommendationListSchema>;
+export type Featured = z.infer<typeof featuredSchema>;
 export type Preferences = z.infer<typeof preferencesSchema>;
 export type User = z.infer<typeof userSchema>;
 export type Rating = z.infer<typeof ratingSchema>;

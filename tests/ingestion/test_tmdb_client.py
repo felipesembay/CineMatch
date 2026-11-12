@@ -67,5 +67,5 @@ def test_details_appends_related_resources() -> None:
     route = respx.get(f"{BASE}/movie/550").respond(200, json={"id": 550})
     TmdbClient.from_settings(_settings()).details("movie", 550)
     assert route.calls.last.request.url.params["append_to_response"] == (
-        "keywords,credits,external_ids"
+        "keywords,credits,external_ids,translations"
     )

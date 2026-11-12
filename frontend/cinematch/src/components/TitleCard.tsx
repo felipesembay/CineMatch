@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth';
 import { track } from '../lib/events';
 import type { ItemSummary, EventSurface } from '../lib/types';
 import { Poster } from './UI';
-import { genreLabel } from '../lib/labels';
+import { useT } from '../lib/i18n';
 export function TitleCard({
   item,
   surface = 'home_row',
@@ -24,6 +24,7 @@ export function TitleCard({
   reason?: string | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const { t, genre } = useT();
   const seen = useRef(false);
   const user = useAuth();
   const navigate = useNavigate();
@@ -91,7 +92,7 @@ export function TitleCard({
           url={item.poster_url}
           className="aspect-[2/3] w-full"
         />
-        <span className="sr-only">Ver detalhes de {item.title}</span>
+        <span className="sr-only">{t('card.details', { title: item.title })}</span>
       </button>
       <div className="mt-2.5 flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -112,23 +113,23 @@ export function TitleCard({
         </div>
         {user && (
           <button
-            aria-label={isFav ? 'Remover da minha lista' : 'Adicionar à minha lista'}
+            aria-label={isFav ? t('card.removeFav') : t('card.addFav')}
             aria-pressed={isFav}
             onClick={() => mutation.mutate()}
             className="rounded-full p-1.5 text-muted hover:bg-raised hover:text-amber"
           >
             <Heart
               size={16}
-              fill={isFav ? '#F5A524' : 'none'}
+              fill={isFav ? 'currentColor' : 'none'}
               className={isFav ? 'text-amber' : ''}
             />
           </button>
         )}
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-[45%] hidden rounded-b-xl bg-gradient-to-t from-black/90 to-transparent p-3 opacity-0 transition-opacity duration-200 md:group-hover:opacity-100 lg:block">
+      <div className="pointer-events-none absolute inset-x-0 top-[45%] hidden rounded-b-xl bg-gradient-to-t from-black/90 to-transparent p-3 text-white opacity-0 transition-opacity duration-200 md:group-hover:opacity-100 lg:block">
         <div className="flex items-center gap-2 text-xs">
           <Info size={14} />
-          <span>{item.genres.slice(0, 2).map(genreLabel).join(' · ')}</span>
+          <span>{item.genres.slice(0, 2).map(genre).join(' · ')}</span>
         </div>
       </div>
     </div>

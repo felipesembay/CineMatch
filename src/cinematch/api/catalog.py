@@ -16,6 +16,7 @@ from cinematch.db import autocommit, get_engine
 from cinematch.logconfig import request_id_ctx
 from cinematch.serving import catalog as cat
 from cinematch.serving.neighbors import active_version, read_neighbors
+from cinematch.serving.reasons import Reason, text_pt
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["catalog"])
@@ -44,6 +45,9 @@ class ExternalLinks(BaseModel):
 
 class ItemDetail(ItemSummary):
     overview: str | None
+    overview_language: str | None = Field(
+        description="idioma da sinopse exibida (pt-BR, pt-PT ou en quando falta tradução)"
+    )
     runtime_minutes: int | None
     release_date: date | None
     status: str | None
@@ -63,7 +67,9 @@ class ItemPage(BaseModel):
 
 class Recommendation(ItemSummary):
     score: float
-    reason: str | None
+    reason: str | None = Field(description="motivo em pt-BR (compatibilidade)")
+    reason_key: str | None = Field(default=None, description="motivo estruturado")
+    reason_args: list[str] = Field(default_factory=list)
 
 
 class RecommendationList(BaseModel):
@@ -97,12 +103,25 @@ def _summary(row: dict[str, Any], settings: Settings) -> dict[str, Any]:
     }
 
 
+def recommendation(
+    row: dict[str, Any], settings: Settings, score: float, reason: Reason | None
+) -> "Recommendation":
+    return Recommendation(
+        **_summary(row, settings),
+        score=score,
+        reason=text_pt(reason),
+        reason_key=reason[0] if reason else None,
+        reason_args=reason[1] if reason else [],
+    )
+
+
 def get_read_engine(engine: Annotated[Engine, Depends(get_engine)]) -> Engine:
     return autocommit(engine)
 
 
 EngineDep = Annotated[Engine, Depends(get_read_engine)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+LangDep = Annotated[cat.Lang, Query(description="idioma de título e sinopse")]
 
 
 @router.get("/genres", response_model=list[Genre])
@@ -124,6 +143,7 @@ def list_movies(
     page: Annotated[int, Query(ge=1, le=500)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
     include_unreleased: bool = False,
+    lang: LangDep = "pt-BR",
 ) -> ItemPage:
     query = cat.ListQuery(
         q=q,
@@ -135,6 +155,7 @@ def list_movies(
         page=page,
         page_size=page_size,
         include_unreleased=include_unreleased,
+        lang=lang,
     )
     with engine.connect() as conn:
         rows, total = cat.list_items(conn, query)
@@ -147,15 +168,18 @@ def list_movies(
 
 
 @router.get("/movies/{item_id}", response_model=ItemDetail, responses={404: {}})
-def get_movie(item_id: int, engine: EngineDep, settings: SettingsDep) -> ItemDetail:
+def get_movie(
+    item_id: int, engine: EngineDep, settings: SettingsDep, lang: LangDep = "pt-BR"
+) -> ItemDetail:
     with engine.connect() as conn:
-        row = cat.item_detail(conn, item_id)
+        row = cat.item_detail(conn, item_id, lang)
     if row is None:
         raise HTTPException(status_code=404, detail="item não encontrado")
     kind = "movie" if row["item_type"] == "movie" else "tv"
     return ItemDetail(
         **_summary(row, settings),
         overview=row["overview"],
+        overview_language=row["overview_language"],
         runtime_minutes=row["runtime_minutes"],
         release_date=row["release_date"],
         status=row["status"],
@@ -175,27 +199,27 @@ def get_movie(item_id: int, engine: EngineDep, settings: SettingsDep) -> ItemDet
 
 def _reason(
     query: dict[str, Any], cand: dict[str, Any], people: dict[int, dict[str, list[str]]]
-) -> str | None:
+) -> Reason:
     """Explicação por sobreposição de metadados (não descreve o interior do modelo)."""
     if query["collection_id"] and cand["collection_id"] == query["collection_id"]:
         return (
-            f"Da coleção {cand['collection_name']}"
+            ("collection", [cand["collection_name"]])
             if cand["collection_name"]
-            else ("Mesma coleção")
+            else ("same_collection", [])
         )
     q_people, c_people = people.get(query["id"], {}), people.get(cand["id"], {})
     shared = [p for p in c_people.get("directors", []) if p in q_people.get("directors", [])]
     if shared:
-        return f"{'Direção' if query['item_type'] == 'movie' else 'Criação'} de {shared[0]}"
+        return ("director" if query["item_type"] == "movie" else "creator", [shared[0]])
     shared = [p for p in c_people.get("cast", []) if p in q_people.get("cast", [])]
     if shared:
-        return f"Com {shared[0]}"
+        return ("cast", [shared[0]])
     genres = [g for g in cand["genres"] if g in query["genres"]]
     if len(genres) >= 2:
-        return f"Também {genres[0]} e {genres[1]}"
+        return ("genres", genres[:2])
     if genres:
-        return f"Também {genres[0]}"
-    return "Tema parecido"  # similaridade vem do texto (sinopse/keywords)
+        return ("genre", [genres[0]])
+    return ("theme", [])  # similaridade vem do texto (sinopse/keywords)
 
 
 @router.get("/movies/{item_id}/similar", response_model=RecommendationList, responses={404: {}})
@@ -205,6 +229,7 @@ def similar(
     settings: SettingsDep,
     k: Annotated[int, Query(ge=1, le=MAX_NEIGHBORS)] = 12,
     max_per_collection: Annotated[int, Query(ge=1, le=MAX_NEIGHBORS)] = 3,
+    lang: LangDep = "pt-BR",
 ) -> RecommendationList:
     """Itens similares por conteúdo (conjunto de vizinhos ativo). Diversidade: no máximo
     `max_per_collection` itens da mesma coleção. Sem vizinhos: fallback por popularidade."""
@@ -216,12 +241,12 @@ def similar(
         pairs = read_neighbors(conn, version, item_id, MAX_NEIGHBORS) if version else []
         fallback = not pairs
         if fallback:
-            rows = cat.popular_fallback(conn, item_id, item_type, k)
+            rows = cat.popular_fallback(conn, item_id, item_type, k, lang=lang)
             scored = [(r, None) for r in rows]
             version = f"fallback:{cat.BAYES_VERSION}"
-            query_row = cat.summaries_by_ids(conn, [item_id])[item_id]
+            query_row = cat.summaries_by_ids(conn, [item_id], lang)[item_id]
         else:
-            summaries = cat.summaries_by_ids(conn, [item_id, *[n for n, _ in pairs]])
+            summaries = cat.summaries_by_ids(conn, [item_id, *[n for n, _ in pairs]], lang)
             query_row = summaries[item_id]
             per_coll: dict[int, int] = {}
             scored = []
@@ -241,16 +266,17 @@ def similar(
 
     items = []
     for pos, (row, score) in enumerate(scored):
-        reason = (
-            f"Popular em {row['genres'][0]}"
+        reason: Reason | None = (
+            ("popular_genre", [row["genres"][0]])
             if fallback and row["genres"]
             else (None if fallback else _reason(query_row, row, people))
         )
         items.append(
-            Recommendation(
-                **_summary(row, settings),
-                score=round(score if score is not None else 1.0 - pos / max(len(scored), 1), 6),
-                reason=reason,
+            recommendation(
+                row,
+                settings,
+                round(score if score is not None else 1.0 - pos / max(len(scored), 1), 6),
+                reason,
             )
         )
     request_id = request_id_ctx.get() or ""

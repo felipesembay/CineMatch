@@ -3,6 +3,7 @@ import { mockRequest } from '../mocks/handlers';
 import {
   eventAckSchema,
   favoritesSchema,
+  featuredSchema,
   genreSchema,
   itemDetailSchema,
   itemSummarySchema,
@@ -14,6 +15,7 @@ import {
   userSchema,
 } from './types';
 import type { Preferences, TrackingEvent } from './types';
+import { prefs } from './prefs';
 
 // Em dev, o Vite faz proxy de /api para o FastAPI (mesma origem: cookie de sessão first-party).
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -37,6 +39,10 @@ async function request<T>(
   body?: unknown,
 ): Promise<T> {
   let raw: unknown;
+  // Toda leitura leva o idioma de exibição (título/sinopse); rotas que não usam ignoram.
+  if (method === 'GET') {
+    path += `${path.includes('?') ? '&' : '?'}lang=${encodeURIComponent(prefs.get().lang)}`;
+  }
   if (USE_MOCKS) {
     raw = await mockRequest(method, path, body);
   } else {
@@ -100,6 +106,7 @@ export const api = {
   deleteAccount: () => request('DELETE', '/users/me', okSchema),
 
   // personalização
+  featured: () => request('GET', '/featured', featuredSchema),
   recommendations: (k = 20) =>
     request('GET', `/recommendations/me?k=${k}`, recommendationListSchema),
   preferences: () => request('GET', '/users/me/preferences', preferencesSchema),

@@ -71,6 +71,41 @@ class CrosswalkId(BaseModel):
     external_id: str
 
 
+class TranslationRecord(BaseModel):
+    """Texto de exibição num idioma (só exibição; features usam o original)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    language: str
+    title: str | None
+    overview: str | None
+    source_language: str  # pt-BR, pt-PT (reserva da sinopse) ou "none" (sem tradução)
+
+
+# Título só da tradução brasileira (os títulos de Portugal costumam ser outros); a sinopse
+# aceita pt-PT como reserva quando a brasileira não existe.
+DISPLAY_LANGUAGE = "pt-BR"
+
+
+def pick_translation(item_type: ItemType, payload: dict[str, Any]) -> TranslationRecord:
+    """Escolhe a tradução pt-BR (com reserva pt-PT na sinopse) do payload `translations`."""
+    by_locale: dict[str, dict[str, Any]] = {}
+    for t in payload.get("translations") or []:
+        if isinstance(t, dict) and t.get("iso_639_1") == "pt":
+            by_locale[f"pt-{t.get('iso_3166_1')}"] = t.get("data") or {}
+    title_key = "title" if item_type == "movie" else "name"
+    br, pt = by_locale.get("pt-BR", {}), by_locale.get("pt-PT", {})
+    title = _clean_str(br.get(title_key))
+    overview, source = _clean_str(br.get("overview")), "pt-BR"
+    if overview is None:
+        overview, source = _clean_str(pt.get("overview")), "pt-PT"
+    if overview is None:
+        source = "pt-BR" if title else "none"
+    return TranslationRecord(
+        language=DISPLAY_LANGUAGE, title=title, overview=overview, source_language=source
+    )
+
+
 class CatalogRecord(BaseModel):
     """Item de catálogo pronto para upsert."""
 
@@ -98,6 +133,8 @@ class CatalogRecord(BaseModel):
     crosswalk: tuple[CrosswalkId, ...] = ()
     keywords: tuple[KeywordRecord, ...] = ()
     credits: tuple[CreditRecord, ...] = ()
+    # None = payload sem `translations` (coletas antigas): não mexe na tradução gravada.
+    translation: TranslationRecord | None = None
 
     @field_validator("runtime_minutes")
     @classmethod
@@ -108,7 +145,8 @@ class CatalogRecord(BaseModel):
         """Hash estável dos campos de conteúdo (detecta mudança real entre coletas)."""
         # crosswalk fica fora: é vínculo entre fontes, não conteúdo do item.
         data = self.model_dump(
-            mode="json", exclude={"source", "item_type", "external_id", "crosswalk"}
+            mode="json",
+            exclude={"source", "item_type", "external_id", "crosswalk", "translation"},
         )
         blob = json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
         return hashlib.sha256(blob).hexdigest()
@@ -275,6 +313,11 @@ def normalize(item_type: ItemType, payload: dict[str, Any]) -> CatalogRecord:
             crosswalk=crosswalk,
             keywords=_keywords(item_type, payload),
             credits=_credits(item_type, payload),
+            translation=(
+                pick_translation(item_type, payload["translations"])
+                if isinstance(payload.get("translations"), dict)
+                else None
+            ),
         )
     except ValidationError as exc:
         msg = exc.errors()[0]["msg"]
