@@ -19,6 +19,7 @@
 ## Sumário
 
 - [O que o app faz](#o-que-o-app-faz)
+- [Telas](#telas)
 - [Arquitetura](#arquitetura)
 - [Dados](#dados)
 - [Modelos](#modelos)
@@ -43,6 +44,24 @@
   - "Achamos que você vai gostar", gerado a partir do que você curtiu, favoritou e avaliou.
   - Abas de favoritos, avaliados e comentados, e curtidos.
 - **Conta:** cadastro com e-mail ou **login com Google**, avaliação de 1 a 5 com comentário e exclusão da conta com todos os dados (LGPD).
+
+## Telas
+
+**Home:** destaque da semana e fileiras do catálogo, com tema claro e escuro.
+
+| Tema claro | Tema escuro |
+|---|---|
+| ![Home no tema claro](docs/images/home.jpg) | ![Home no tema escuro](docs/images/home_escuro.jpg) |
+
+**Detalhe e recomendações:** sinopse em português, metadados e "Mais títulos como este", com o motivo de cada sugestão.
+
+| Detalhe | Títulos parecidos |
+|---|---|
+| ![Página de detalhe](docs/images/detalhe.jpg) | ![Recomendações de títulos parecidos](docs/images/similares.jpg) |
+
+**Busca:** por título, com filtros de tipo, gênero, ano e ordenação.
+
+![Busca por "batman"](docs/images/busca.jpg)
 
 ## Arquitetura
 
@@ -201,26 +220,81 @@ A meta da especificação é p95 < 200 ms. A concorrência ainda não foi testad
 
 ## Como rodar
 
-Requisitos: Docker com Compose v2 e [uv](https://docs.astral.sh/uv/). Para o frontend em modo dev, Node 22.
+Tudo roda na sua máquina com Docker. **A base de dados não vem no repositório:** os termos do TMDB não permitem redistribuir os dados e pedem cache de no máximo 6 meses. Por isso, no passo 4 você baixa o catálogo direto das APIs do TMDB e do TVmaze com a CLI do projeto, usando o seu próprio token (gratuito).
+
+### Pré-requisitos
+
+- [Docker](https://docs.docker.com/get-docker/) com Compose v2
+- [uv](https://docs.astral.sh/uv/) (gerencia o Python 3.12 e as dependências)
+- Token de leitura do TMDB: crie uma conta em themoviedb.org e copie o **API Read Access Token** em https://www.themoviedb.org/settings/api
+- Cerca de 4 GB livres em disco (PyTorch CPU, modelo de embeddings opcional e o banco)
+
+### 1. Clonar e configurar
 
 ```bash
 git clone https://github.com/felipesembay/CineMatch.git && cd CineMatch
-cp .env.example .env                        # defina POSTGRES_PASSWORD e TMDB_API_TOKEN
+cp .env.example .env
+```
+
+No `.env`, ajuste três valores:
+
+| Variável | O que colocar |
+|---|---|
+| `POSTGRES_PASSWORD` | uma senha qualquer para o Postgres local |
+| `CINEMATCH_DATABASE_URL` | troque `change-me` pela mesma senha |
+| `TMDB_API_TOKEN` | o token do TMDB |
+
+Deixe `CINEMATCH_API_DATABASE_URL` comentada: assim a API usa o Postgres do Compose.
+
+### 2. Instalar as dependências
+
+```bash
 uv sync --extra ml
+```
+
+### 3. Subir o banco e criar as tabelas
+
+```bash
 docker compose up -d --build postgres mlflow
 uv run cinematch db upgrade
+```
 
-# dados (token TMDB gratuito: https://www.themoviedb.org/settings/api)
+### 4. Baixar a base de dados
+
+O banco começa vazio. Escolha o tamanho do catálogo (a coleta respeita o limite de 4 req/s do TMDB):
+
+```bash
+# opção rápida: 500 filmes + 500 séries (~5 min)
 uv run cinematch ingest tmdb --types movie tv --max-items 500 --yes
+
+# ou o catálogo completo do projeto: ~10 mil filmes + 2,5 mil séries (~1 h)
+uv run cinematch ingest tmdb --types movie --max-items 10000 --yes
+uv run cinematch ingest tmdb --types tv --max-items 2500 --yes
+```
+
+A coleta pode ser interrompida: `uv run cinematch ingest tmdb --resume <run_id>` continua de onde parou (o `run_id` aparece na saída e em `uv run cinematch ingest status`).
+
+Depois, os dados complementares de séries e a checagem de qualidade:
+
+```bash
 uv run cinematch ingest tvmaze && uv run cinematch link tvmaze
 uv run cinematch quality check
+```
 
-# features, modelos e vizinhos servidos
+### 5. Gerar as recomendações
+
+```bash
 uv run cinematch features tfidf
-uv run cinematch features embeddings --text-version emb_text_v2
 uv run cinematch recs build-similar --method tfidf --activate --mlflow
+```
 
+Opcional, para comparar modelos no notebook: `uv run cinematch features embeddings --text-version emb_text_v2` (na primeira vez, baixa o modelo de ~470 MB).
+
+### 6. Subir a aplicação
+
+```bash
 docker compose up -d --build api web
+curl http://localhost:8010/health/ready     # {"status":"ok",...} = API conectada ao banco
 ```
 
 | Serviço | URL |
@@ -229,9 +303,24 @@ docker compose up -d --build api web
 | API (Swagger) | http://localhost:8010/docs |
 | MLflow | http://localhost:5010 |
 
-Use `localhost` (não `127.0.0.1`) para o login com Google: o endereço de retorno precisa bater com o cadastrado no Google Cloud.
+### 7. Login com Google (opcional)
 
-Todos os comandos (refresh, reprocessamento, Gold, benchmark, latência, testes de integração) estão em [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Sem essa etapa, o app funciona normalmente com cadastro por e-mail e senha, e o botão do Google fica oculto.
+
+1. No [Google Cloud Console](https://console.cloud.google.com/apis/credentials), crie um **ID do cliente OAuth** do tipo "Aplicativo da Web".
+2. Em **URIs de redirecionamento autorizados**, adicione `http://localhost:8088/api/auth/google/callback`.
+3. Preencha `CINEMATCH_GOOGLE_CLIENT_ID` e `CINEMATCH_GOOGLE_CLIENT_SECRET` no `.env` e recrie a API: `docker compose up -d api`.
+
+Acesse o app por `localhost` (não `127.0.0.1`): o endereço de retorno precisa bater com o cadastrado no Google.
+
+### Parar
+
+```bash
+docker compose down        # mantém os dados
+docker compose down -v     # apaga também o banco, o Bronze e o MLflow
+```
+
+Todos os comandos (refresh do catálogo, reprocessamento, Gold, benchmark, latência, testes de integração) estão em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Estrutura do repositório
 
@@ -261,7 +350,7 @@ docs/                 plano, ADRs, fontes de dados, experimentos, operação
 
 - **Métricas offline são proxies.** A escolha entre TF-IDF e reranker deve sair de um teste A/B com CTR e favoritos, já instrumentado via eventos com `model_version`.
 - **Filtragem colaborativa** (ALS/BPR) e ranking aprendido com interações reais só quando houver volume suficiente de usuários.
-- **Nuvem:** banco migrado para o Azure Database for PostgreSQL em 2026-11-11, por cópia completa e verificada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Próximos: API na mesma região do banco, containers na nuvem, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
+- **Nuvem:** banco migrado para o Azure Database for PostgreSQL em 2026-11-11, por cópia completa e verificada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Deploy no Vercel preparado (`vercel.json`: frontend Vite + FastAPI como função Python, região São Paulo; API com role de banco de privilégio mínimo), pausado enquanto o acesso de rede ao banco no Azure não é liberado. Próximos: API na mesma região do banco, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
 - **Conta:** cadastro por senha sem verificação de e-mail nem recuperação de senha (o login com Google cobre esse caso); o limitador de login é em memória (uma réplica).
 - **Termos do TMDB:** restringem o uso dos dados em ML. Este é um projeto de estudo, não comercial, com o risco registrado no [ADR-008](docs/DECISIONS.md).
 
