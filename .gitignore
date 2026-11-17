@@ -43,3 +43,7 @@ frontend/**/dist/
 
 # credencial OAuth baixada do Google Cloud
 client_secret_*.json
+
+# Config de deploy (exceção ao *.json acima)
+!vercel.json
+.vercel

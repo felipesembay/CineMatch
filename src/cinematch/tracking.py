@@ -6,6 +6,7 @@ de rótulo fraco recebem a tag `label_kind=weak:*` para não serem lidas como re
 """
 
 import json
+import math
 import os
 import tempfile
 from collections.abc import Iterator, Mapping
@@ -38,7 +39,7 @@ def _numeric(metrics: Mapping[str, Any]) -> dict[str, float]:
         name = key.replace("@", "_at_")
         if isinstance(value, bool):
             continue
-        if isinstance(value, int | float) and value == value:  # descarta nan
+        if isinstance(value, int | float) and not math.isnan(value):
             out[name] = float(value)
         elif isinstance(value, list | tuple) and len(value) == 2:
             out[f"{name}_lo"], out[f"{name}_hi"] = float(value[0]), float(value[1])
