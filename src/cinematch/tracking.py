@@ -18,6 +18,19 @@ from cinematch.config import get_settings
 from cinematch.data.gold import _git_commit
 
 WEAK_LABEL = "weak:tmdb_collection"
+
+# Model Registry: uma versão por conjunto de vizinhos gerado com `recs build-similar --mlflow`.
+# Alias `champion` = conjunto servido pela API; `challenger` = candidato a teste A/B.
+SIMILAR_MODEL = "cinematch-similar"
+CHAMPION = "champion"
+CHALLENGER = "challenger"
+REGISTRY_DESCRIPTIONS = {
+    SIMILAR_MODEL: (
+        "Títulos parecidos (item → item). Cada versão corresponde a um conjunto de vizinhos "
+        "top-k gravado no Postgres (tag `neighbor_set`); a API lê os vizinhos, não o modelo. "
+        "Alias champion = conjunto servido; challenger = candidato."
+    ),
+}
 DISCLAIMER = (
     "Proxies com rótulo fraco (coleção TMDB), sem interações de usuários. "
     "Não medem relevância para pessoas (spec §8)."
@@ -81,9 +94,11 @@ def log_results(
     *,
     artifacts: Mapping[str, Any] | None = None,
     model: Any | None = None,
-) -> None:
-    """Loga métricas numéricas, dicts como JSON e (opcional) o modelo via joblib."""
-    import joblib
+) -> str | None:
+    """Loga métricas numéricas, dicts como JSON e (opcional) o modelo no flavor sklearn.
+
+    Devolve a URI do modelo logado (`models:/...`), usada para registrá-lo no Model Registry.
+    """
     import mlflow
 
     mlflow.log_metrics(_numeric(metrics))
@@ -92,7 +107,47 @@ def log_results(
             path = Path(tmp) / fname
             path.write_text(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
             mlflow.log_artifact(str(path))
-        if model is not None:
-            path = Path(tmp) / "model.joblib"
-            joblib.dump(model, path)
-            mlflow.log_artifact(str(path), artifact_path="model")
+    if model is None:
+        return None
+    import mlflow.sklearn
+
+    # cloudpickle: modelos gerados por este projeto (mesma confiança do joblib usado antes).
+    # O padrão `skops` exigiria a dependência e a lista de tipos confiáveis (ex.: LightGBM).
+    info = mlflow.sklearn.log_model(
+        model, name="model", serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE
+    )
+    return info.model_uri
+
+
+def register_model(
+    model_uri: str, name: str, *, tags: Mapping[str, str], alias: str | None = None
+) -> int:
+    """Cria uma nova versão de `name` no Model Registry e, se pedido, aponta o alias para ela."""
+    import mlflow
+    from mlflow import MlflowClient
+
+    version = int(mlflow.register_model(model_uri, name, tags=dict(tags)).version)
+    client = MlflowClient()
+    client.update_registered_model(name, description=REGISTRY_DESCRIPTIONS.get(name, ""))
+    if alias:
+        client.set_registered_model_alias(name, alias, version)
+    return version
+
+
+def promote_neighbor_set(neighbor_set: str, *, alias: str = CHAMPION) -> int | None:
+    """Move o alias para a versão registrada do conjunto de vizinhos `neighbor_set`.
+
+    Mantém o registry igual ao que a API serve depois de `recs activate`. Devolve a versão
+    promovida, ou None se o conjunto nunca foi registrado (build sem `--mlflow`).
+    """
+    from mlflow import MlflowClient
+
+    client = MlflowClient()
+    found = client.search_model_versions(
+        f"name = '{SIMILAR_MODEL}' and tags.neighbor_set = '{neighbor_set}'"
+    )
+    if not found:
+        return None
+    version = max(int(v.version) for v in found)
+    client.set_registered_model_alias(SIMILAR_MODEL, alias, version)
+    return version

@@ -100,7 +100,7 @@ uv run --extra ml cinematch evaluate content-sanity --out docs/experiments/<arqu
 uv run --extra ml cinematch recs build-similar --method tfidf --activate --mlflow   # baseline servido
 uv run --extra ml cinematch recs build-similar --method rerank-logreg --mlflow      # challenger (inativo)
 uv run cinematch recs list                                   # conjuntos gravados e qual está ativo
-uv run cinematch recs activate '<model_version>'             # troca/rollback do conjunto servido
+uv run cinematch recs activate '<model_version>' [--mlflow] # troca/rollback; --mlflow move o alias champion
 uv run cinematch recs delete '<model_version>' [...]         # apaga conjuntos inativos (recusa o ativo)
 docker compose up -d --build api                             # http://127.0.0.1:8010/docs
 uv run cinematch evaluate api-latency --out docs/experiments/<arquivo>.json
@@ -143,6 +143,19 @@ uv run jupyter lab models/                      # abra similarity_models.ipynb
 ```
 
 Os modelos supervisionados usam rótulo fraco (mesma coleção TMDB), não interações de usuários. Ver ADR-017.
+
+### Model Registry
+
+`recs build-similar --mlflow` loga o modelo no flavor sklearn (vetorizador TF-IDF ou reranker) e cria uma nova versão do modelo registrado **`cinematch-similar`**:
+
+| Alias | Significado |
+|---|---|
+| `champion` | conjunto servido pela API (build com `--activate`, ou `recs activate --mlflow`) |
+| `challenger` | último candidato gerado sem `--activate` (teste A/B) |
+
+Cada versão tem a tag `neighbor_set` = `model_version` do conjunto no Postgres. A API continua lendo os vizinhos pré-computados, não o modelo. O registry é o catálogo auditável do que foi gerado e do que está servido. Para carregar o modelo servido: `mlflow.sklearn.load_model("models:/cinematch-similar@champion")`.
+
+Um build que reaproveita um conjunto já gravado (mesmo corpus e parâmetros) não cria versão nova.
 
 ## Qualidade de dados
 

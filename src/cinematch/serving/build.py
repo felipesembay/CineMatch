@@ -61,6 +61,7 @@ def build_tfidf(engine: Engine, k: int = DEFAULT_K, chunk: int = 1024) -> dict[s
         "scores": val,
         "params": {"k": k, "tfidf_version": m["version"], "corpus_hash": m["corpus_hash"]},
         "metrics": {"build_seconds": round(time.perf_counter() - started, 2)},
+        "model": model.vectorizer,  # registrado no MLflow; os vizinhos ficam no Postgres
     }
 
 
@@ -134,11 +135,12 @@ def build_and_store(
         activate=activate,
     )
     if log_mlflow and not result["reused"]:
-        _log_mlflow(built)
+        result["registry"] = _log_mlflow(built, activate=activate)
     return {**result, "metrics": built["metrics"]}
 
 
-def _log_mlflow(built: dict[str, Any]) -> None:
+def _log_mlflow(built: dict[str, Any], *, activate: bool) -> dict[str, Any] | None:
+    """Loga o build no experimento `serving-similar` e registra o modelo no Model Registry."""
     from cinematch import tracking
 
     tracking.setup("serving-similar")
@@ -152,8 +154,18 @@ def _log_mlflow(built: dict[str, Any]) -> None:
         label_kind=label,
         tags={"neighbor_set": built["model_version"], "stage": "serving_candidate"},
     ):
-        tracking.log_results(
+        model_uri = tracking.log_results(
             built["metrics"],
             artifacts={"importance.json": built["importance"]} if "importance" in built else None,
             model=built.get("model"),
         )
+    if model_uri is None:
+        return None
+    alias = tracking.CHAMPION if activate else tracking.CHALLENGER
+    version = tracking.register_model(
+        model_uri,
+        tracking.SIMILAR_MODEL,
+        tags={"neighbor_set": built["model_version"], "method": built["method"]},
+        alias=alias,
+    )
+    return {"model": tracking.SIMILAR_MODEL, "version": version, "alias": alias}

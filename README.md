@@ -213,7 +213,8 @@ A meta da especificação é p95 < 200 ms. A concorrência ainda não foi testad
   - Embeddings versionados por `modelo@commit|versão_do_texto` e incrementais (só re-encoda texto alterado).
   - Snapshots Gold com hash de conteúdo.
   - `fingerprint` do conjunto de avaliação em cada run.
-- **MLflow** (servidor próprio no Compose): os experimentos `similarity-item2item` e `serving-similar` guardam parâmetros, métricas, IC, importância de features e o modelo serializado. Runs com rótulo fraco recebem a tag `label_kind=weak:tmdb_collection`.
+- **MLflow** (servidor próprio no Compose): os experimentos `similarity-item2item` e `serving-similar` guardam parâmetros, métricas, IC, importância de features e o modelo (flavor sklearn). Runs com rótulo fraco recebem a tag `label_kind=weak:tmdb_collection`.
+- **Model Registry:** cada build servido vira uma versão de `cinematch-similar`, ligada ao conjunto de vizinhos pela tag `neighbor_set`. O alias `champion` aponta para o que a API serve e acompanha `recs activate`; `challenger` marca o candidato do teste A/B.
 - **Qualidade como gate:** o `quality check` grava histórico, e um check em falha bloqueia o snapshot Gold.
 - **CI (GitHub Actions):**
   - Backend: ruff, pytest com Postgres + pgvector e build da imagem.

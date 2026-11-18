@@ -352,7 +352,16 @@ def cmd_recs_activate(args: argparse.Namespace) -> int:
     except LookupError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    print(json.dumps({"active": args.model_version}))
+    out: dict[str, object] = {"active": args.model_version}
+    if args.mlflow:
+        from cinematch import tracking
+
+        tracking.setup("serving-similar")
+        version = tracking.promote_neighbor_set(args.model_version)
+        if version is None:
+            print("aviso: conjunto não registrado no MLflow (build sem --mlflow)", file=sys.stderr)
+        out["registry"] = {"model": tracking.SIMILAR_MODEL, "version": version}
+    print(json.dumps(out))
     return 0
 
 
@@ -595,10 +604,15 @@ def build_parser() -> argparse.ArgumentParser:
     rb.add_argument("--method", choices=["tfidf", "rerank-logreg"], default="tfidf")
     rb.add_argument("-k", type=int, default=50, help="vizinhos guardados por item")
     rb.add_argument("--activate", action="store_true", help="passa a servir este conjunto")
-    rb.add_argument("--mlflow", action="store_true", help="registra o build no MLflow")
+    rb.add_argument(
+        "--mlflow",
+        action="store_true",
+        help="loga o build e registra o modelo no MLflow (alias champion se --activate)",
+    )
     rb.set_defaults(func=cmd_recs_build)
     ra = recs.add_parser("activate", help="troca o conjunto servido (rollback incluso)")
     ra.add_argument("model_version")
+    ra.add_argument("--mlflow", action="store_true", help="move o alias champion no Model Registry")
     ra.set_defaults(func=cmd_recs_activate)
     rd = recs.add_parser("delete", help="apaga conjuntos inativos (libera espaço)")
     rd.add_argument("model_version", nargs="+")
