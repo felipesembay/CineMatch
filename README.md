@@ -2,6 +2,8 @@
 
 **Recomendador de filmes e séries de ponta a ponta:** coleta de dados públicos, qualidade e versionamento, comparação de modelos com MLflow, serving com FastAPI e um app web em React.
 
+**App no ar:** https://cinematch-wine-six.vercel.app
+
 [![CI](https://github.com/felipesembay/CineMatch/actions/workflows/ci.yml/badge.svg)](https://github.com/felipesembay/CineMatch/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -350,7 +352,7 @@ docs/                 plano, ADRs, fontes de dados, experimentos, operação
 
 - **Métricas offline são proxies.** A escolha entre TF-IDF e reranker deve sair de um teste A/B com CTR e favoritos, já instrumentado via eventos com `model_version`.
 - **Filtragem colaborativa** (ALS/BPR) e ranking aprendido com interações reais só quando houver volume suficiente de usuários.
-- **Nuvem:** banco migrado para o Azure Database for PostgreSQL em 2026-11-11, por cópia completa e verificada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). Deploy no Vercel preparado (`vercel.json`: frontend Vite + FastAPI como função Python, região São Paulo; API com role de banco de privilégio mínimo), pausado enquanto o acesso de rede ao banco no Azure não é liberado. Próximos: API na mesma região do banco, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
+- **Nuvem:** banco migrado para o Azure Database for PostgreSQL em 2026-11-11, por cópia completa e verificada (`scripts/migrate_db.sh`, [ADR-021](docs/DECISIONS.md)). App publicado no Vercel em 2026-11-18 (`vercel.json`: frontend Vite + FastAPI como função Python, região São Paulo; API com role de banco de privilégio mínimo). Próximos: API na mesma região do banco, orquestração dos jobs batch (Airflow) e monitoramento (Prometheus/Grafana, drift).
 - **Conta:** cadastro por senha sem verificação de e-mail nem recuperação de senha (o login com Google cobre esse caso); o limitador de login é em memória (uma réplica).
 - **Termos do TMDB:** restringem o uso dos dados em ML. Este é um projeto de estudo, não comercial, com o risco registrado no [ADR-008](docs/DECISIONS.md).
 
