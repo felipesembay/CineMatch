@@ -10,7 +10,7 @@
 
 | | |
 |---|---|
-| **Catálogo** | 12.497 títulos (9.997 filmes, 2.500 séries), 94 mil pessoas, 19,5 mil keywords |
+| **Catálogo** | 13.364 títulos (10.864 filmes, 2.500 séries), 100 mil pessoas, 20,3 mil keywords |
 | **Modelos comparados** | TF-IDF, Sentence Transformers, RRF, Rocchio, LogisticRegression, SGD, LightGBM (LambdaRank) |
 | **Em produção** | similares por TF-IDF (vizinhos pré-computados) + recomendação personalizada por Rocchio |
 | **Latência** | `/movies/{id}/similar`: p95 18,8 ms com Postgres local; 222 ms com o banco no Azure (RTT ~40 ms) |
@@ -118,7 +118,7 @@ flowchart LR
 | **Gold** | Snapshots Parquet imutáveis com hash de conteúdo, manifesto e versões. Mesmo conteúdo, mesmo snapshot. |
 | **Retenção** | Os termos do TMDB pedem cache de no máximo 6 meses. `tmdb-refresh` renova os itens mais antigos e `catalog expire` remove o que passou do prazo. Itens com dados de usuário viram *tombstone* em vez de serem apagados. |
 
-Cobertura atual: pôster em 99,6% dos filmes e 97,9% das séries; sinopse em 99,5% e 92,6%; 2.832 filmes pertencem a uma coleção (franquia).
+Cobertura em 2026-11-18: pôster em 99,7% dos filmes e 97,9% das séries; sinopse em 99,5% e 92,6%; 2.986 filmes pertencem a uma coleção (franquia).
 
 ## Modelos
 
